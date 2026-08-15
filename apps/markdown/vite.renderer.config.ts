@@ -24,6 +24,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: { dedupe: TIPTAP_DEDUPE },
   server: {
+    // 127.0.0.1 (not localhost): on Windows Node binds localhost to ::1 only,
+    // while Chromium may resolve it to 127.0.0.1 first -> the dev tab never loads
+    host: '127.0.0.1',
     port: Number(process.env.MARKDOWN_DEV_PORT) || 5177,
     strictPort: true,
   },

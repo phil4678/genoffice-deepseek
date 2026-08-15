@@ -26,6 +26,7 @@ export default defineConfig({
     plugins: [react()],
     resolve: { alias: localAlias },
     server: {
+      host: '127.0.0.1',
       // Overridable so multiple genoffice dev instances can coexist (default 5173).
       port: Number(process.env.DOCS_DEV_PORT) || 5173,
       strictPort: Boolean(process.env.DOCS_DEV_PORT),

@@ -52,6 +52,7 @@ export default defineConfig({
     resolve: { alias: workspaceAlias },
     plugins: [react()],
     server: {
+      host: '127.0.0.1',
       port: Number(process.env.SLIDES_DEV_PORT) || 5175,
       strictPort: Boolean(process.env.SLIDES_DEV_PORT),
     },

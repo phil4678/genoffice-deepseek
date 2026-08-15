@@ -30,6 +30,7 @@ export default defineConfig({
     plugins: [react()],
     resolve: { dedupe: TIPTAP_DEDUPE },
     server: {
+      host: '127.0.0.1',
       port: Number(process.env.MARKDOWN_DEV_PORT) || 5177,
       strictPort: Boolean(process.env.MARKDOWN_DEV_PORT),
     },

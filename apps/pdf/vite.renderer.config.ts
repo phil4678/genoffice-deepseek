@@ -23,6 +23,9 @@ export default defineConfig({
     }),
   ],
   server: {
+    // 127.0.0.1 (not localhost): on Windows Node binds localhost to ::1 only,
+    // while Chromium may resolve it to 127.0.0.1 first -> the dev tab never loads
+    host: '127.0.0.1',
     port: Number(process.env.PDF_DEV_PORT) || 5176,
     strictPort: true,
   },

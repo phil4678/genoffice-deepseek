@@ -40,6 +40,7 @@ export default defineConfig({
       }),
     ],
     server: {
+      host: '127.0.0.1',
       port: Number(process.env.PDF_DEV_PORT) || 5176,
       strictPort: Boolean(process.env.PDF_DEV_PORT),
     },
