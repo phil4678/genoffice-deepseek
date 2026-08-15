@@ -5,8 +5,9 @@ This repository is a fork of
 replaces the Genspark LLM proxy with the DeepSeek API and fixes the
 cross-platform developer experience on Windows.
 
-All fork changes live on the **`deepseek-provider`** branch. `main` mirrors
-upstream exactly — see [Syncing with upstream](#syncing-with-upstream).
+All fork changes live on the **`deepseek-provider`** branch (set it as the
+default branch in the repo settings). `main` can be kept in sync with
+upstream — see [Syncing with upstream](#syncing-with-upstream).
 
 ## What's different from upstream
 
@@ -58,6 +59,8 @@ lives under the `fork` remote.
 ```bash
 git fetch origin
 git checkout main && git pull origin main          # keep the mirror's main current
+# first time only: replace GitHub's auto-generated initial commit on main
+git push fork main --force
 git checkout deepseek-provider && git rebase main  # replay the fork changes
 git push --force-with-lease fork deepseek-provider
 ```
