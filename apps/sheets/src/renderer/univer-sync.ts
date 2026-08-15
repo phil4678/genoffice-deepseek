@@ -217,6 +217,18 @@ export function nextSessionTableName(journal: EditJournal): string {
   return `Table${index}`
 }
 
+/**
+ * Map the workbook DSL's alignment vocabulary onto the Univer facade's. The
+ * facade's 'normal' is HorizontalAlign.RIGHT and it throws on the DSL's
+ * 'right' (transformFacadeHorizontalAlignment), which is what the AI's
+ * format_range ops emit.
+ */
+export function facadeHorizontalAlign(
+  value: 'left' | 'center' | 'right' | null | undefined,
+): 'left' | 'center' | 'normal' {
+  return value === 'left' ? 'left' : value === 'center' ? 'center' : 'normal'
+}
+
 /// Shared by demo replay and lazy Apply: pushes one format patch through the
 /// same facade setters the ribbon uses. null (or a missing field in demo
 /// CellFormatState) clears back to the default.
@@ -246,9 +258,7 @@ export function applyFormatPatchToRange(
   if (patch.fillColor !== undefined) range.setBackground(patch.fillColor as unknown as string)
   if (patch.numberFormat !== undefined) range.setNumberFormat(patch.numberFormat ?? 'General')
   if (patch.horizontalAlign !== undefined) {
-    range.setHorizontalAlignment(
-      (patch.horizontalAlign ?? 'normal') as 'left' | 'center' | 'normal',
-    )
+    range.setHorizontalAlignment(facadeHorizontalAlign(patch.horizontalAlign))
   }
   if (patch.verticalAlign !== undefined) {
     if (patch.verticalAlign === null) range.setValue({ s: { vt: null } } as unknown as ICellData)
