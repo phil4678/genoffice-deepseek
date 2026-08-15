@@ -21,7 +21,7 @@ import type { WebContents } from 'electron'
 import { execFile } from 'node:child_process'
 import { readFile, writeFile, rm, stat, mkdir, open } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { gskApiKey, gskSlideGenerate, setGskProxyUrl } from '@genoffice/ai-search'
@@ -1591,6 +1591,14 @@ export function registerSlidesIpc(): void {
         const msg = err instanceof Error ? err.message : String(err)
         // landing failures otherwise only reach the renderer, which paraphrases them
         console.error('[html-to-pptx] failed:', msg)
+        try {
+          appendFileSync(
+            join(app.getPath('temp'), 'genoffice-ai-errors.log'),
+            `${new Date().toISOString()} [html-to-pptx] ${msg}\n`,
+          )
+        } catch {
+          /* fail-open */
+        }
         return { error: msg }
       }
     },

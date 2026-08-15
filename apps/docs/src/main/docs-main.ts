@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  appendFileSync,
   readFileSync,
   statSync,
   unlinkSync,
@@ -2475,6 +2476,21 @@ const SETTINGS_PATH = () => userDataPath('ai-settings.json')
 const activeAiStreams = new Map<string, AbortController>()
 
 /**
+ * Append one line to the AI failure log in the temp dir — machine-readable
+ * diagnostics that survive renderer paraphrasing and closed terminals.
+ */
+function logAiFailure(line: string): void {
+  try {
+    appendFileSync(
+      join(app.getPath('temp'), 'genoffice-ai-errors.log'),
+      `${new Date().toISOString()} ${line}\n`,
+    )
+  } catch {
+    /* fail-open */
+  }
+}
+
+/**
  * AI settings + chat/stream proxy handlers. Split out so the shell can
  * register them exactly once for all window types (docs, sheets, home) —
  * sheets' standalone AI handlers use the same channel names.
@@ -2534,15 +2550,26 @@ export function registerAiIpc(): void {
     }
     try {
       let stopReason: string | undefined
+      let deltaCount = 0
       await streamForProvider(provider, config, system, messages, tools, maxTokens, {
         signal: controller.signal,
-        onDelta: (text) => send({ requestId, type: 'delta', text }),
+        onDelta: (text) => {
+          deltaCount += 1
+          send({ requestId, type: 'delta', text })
+        },
         onToolCall: (toolCall) => send({ requestId, type: 'tool-call', toolCall }),
         onActivity: ping,
         onStopReason: (reason) => {
           stopReason = reason
         },
       })
+      // a "successful" stream with zero content deltas surfaces as an empty
+      // turn in the renderer — record it here where the reason can be seen
+      if (deltaCount === 0) {
+        logAiFailure(
+          `[ai-stream] ${provider}/${config.model}: empty stream (0 content deltas, stop=${stopReason ?? 'none'})`,
+        )
+      }
       send({ requestId, type: 'done', stopReason })
     } catch (err) {
       if (controller.signal.aborted) {
@@ -2552,6 +2579,7 @@ export function registerAiIpc(): void {
         // Surface the underlying reason in the dev terminal — the renderer only
         // sees the localized/paraphrased error, which hides the real cause
         console.error(`[ai-stream] ${requestId} (${provider}/${config.model}) failed:`, msg)
+        logAiFailure(`[ai-stream] ${provider}/${config.model}: ${msg}`)
         send({
           requestId,
           type: 'error',
