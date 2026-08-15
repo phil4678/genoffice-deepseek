@@ -1,29 +1,28 @@
-> **This is a fork.** This repository replaces the Genspark AI backend with the
-> DeepSeek API and carries Windows dev-tooling fixes. See [FORK.md](FORK.md)
-> for what changed, how to run it, and how to sync with upstream. All fork
-> work lives on the `deepseek-provider` branch; `main` mirrors upstream.
+# GenOffice — DeepSeek fork
 
-# [GenOffice](https://genoffice.ai/)
+> **This repository is a fork of [genspark-ai/genoffice](https://github.com/genspark-ai/genoffice).**
+> All fork changes live on the `deepseek-provider` branch — see
+> [FORK.md](FORK.md) for the full list of changes and how to sync with upstream.
 
-**The world's first full-featured open-source AI Office suite.**
+An open-source, AI-native office suite for macOS, Windows, and Linux: a word
+processor (Docs), spreadsheet (Sheets), presentation editor (Slides), PDF
+editor, and Markdown editor as five Electron apps sharing one engine layer,
+hosted together by a suite shell. It opens and saves the real Microsoft
+Office formats — Word (`.docx`), Excel (`.xlsx`), PowerPoint (`.pptx`) — with
+byte-preserving round trips, and builds AI editing into the workflow rather
+than bolting on a chat box.
 
-[![License: Apache-2.0](https://img.shields.io/github/license/genspark-ai/genoffice)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/genspark-ai/genoffice)](https://github.com/genspark-ai/genoffice/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/genspark-ai/genoffice/total)](https://github.com/genspark-ai/genoffice/releases)
+**AI backend: DeepSeek.** This fork replaces the Genspark LLM proxy with the
+DeepSeek API (`deepseek-v4-flash` / `deepseek-v4-pro`). Set your API key
+before starting:
 
-[Website](https://genoffice.ai/) · [Download](https://github.com/genspark-ai/genoffice/releases/latest) · [Demo](https://www.youtube.com/watch?v=B2pLdMX95v4)
+```bash
+npm install
+export DEEPSEEK_API_KEY=sk-...    # Windows: set DEEPSEEK_API_KEY=sk-...
+npm run dev                       # all editors + shell, or: npm run dev:docs
+```
 
-GenOffice is a free, open-source alternative to Microsoft Office for macOS,
-Windows, and Linux, built around AI editing as a first-class workflow rather
-than a bolted-on chat box. It opens and saves the real Microsoft Office
-formats — Word (`.docx`), Excel (`.xlsx`), PowerPoint (`.pptx`) — and edits
-PDF and Markdown too: a word processor, spreadsheet, presentation editor,
-PDF editor, and Markdown editor as six Electron apps sharing one engine
-layer.
-
-[![Meet GenOffice — the world's first full-featured open-source AI Office (video)](https://img.youtube.com/vi/B2pLdMX95v4/maxresdefault.jpg)](https://www.youtube.com/watch?v=B2pLdMX95v4)
-
-[Watch the demo video on YouTube](https://www.youtube.com/watch?v=B2pLdMX95v4)
+---
 
 ## Features
 
