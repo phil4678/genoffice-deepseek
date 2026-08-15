@@ -22,6 +22,18 @@ export DEEPSEEK_API_KEY=sk-...    # Windows: set DEEPSEEK_API_KEY=sk-...
 npm run dev                       # all editors + shell, or: npm run dev:docs
 ```
 
+The installed app doesn't inherit a terminal's environment: to use AI
+features there, set `DEEPSEEK_API_KEY` as a system/user environment variable
+(Windows: Start → "Edit environment variables for your account"), or put the
+key in `%APPDATA%\GenOffice\ai-settings.json`:
+
+```json
+{
+  "provider": "deepseek",
+  "providers": { "deepseek": { "apiKey": "sk-...", "model": "deepseek-v4-pro" } }
+}
+```
+
 ---
 
 ## Features
@@ -123,16 +135,12 @@ PATH) for the sheets xlsx sidecar.
   the environment, the macOS and Windows installers are unsigned — code
   signing is skipped with a warning rather than failing. That is the expected
   result for a local build.
-- **Windows sidecar staging.** `dist:win` expects the xlsx sidecar at the
-  MinGW cross-compilation path. Building on Windows leaves it under the MSVC
-  target instead, so stage it first from `apps/sheets/native/xlsx-engine`:
-
-  ```bash
-  cargo build --release --target x86_64-pc-windows-gnu
-  ```
-
-  or copy an existing `target/release/xlsx-sidecar.exe` to
-  `target/x86_64-pc-windows-gnu/release/`.
+- **Windows xlsx sidecar.** A native Windows build (`cargo build --release`
+  → the MSVC target) is picked up automatically; only cross-compiled MinGW
+  builds need `cargo build --release --target x86_64-pc-windows-gnu` from
+  `apps/sheets/native/xlsx-engine`. If neither exists, electron-builder
+  packages without the sidecar (Sheets can't open `.xlsx`), so run the sidecar
+  build first.
 
 - **Auto-update is off.** With `GENOFFICE_UPDATE_URL` unset, the packaged app
   ships without an update feed and in-app auto-update stays disabled (see

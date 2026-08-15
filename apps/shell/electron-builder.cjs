@@ -18,6 +18,26 @@ const { execFileSync } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
+// dist:win packages the sidecar from the MinGW cross-compilation path (where
+// non-Windows cross builds put it). A native Windows build (`cargo build
+// --release`) lands under the MSVC target instead; prefer it when present so
+// native Windows packaging doesn't silently ship without the sidecar —
+// electron-builder only logs a missing extraResources source and still exits 0.
+const winSidecarCandidates = [
+  join(
+    __dirname,
+    '../sheets/native/xlsx-engine/target/x86_64-pc-windows-gnu/release/xlsx-sidecar.exe',
+  ),
+  join(__dirname, '../sheets/native/xlsx-engine/target/release/xlsx-sidecar.exe'),
+]
+const winSidecarSource = winSidecarCandidates.find((p) => existsSync(p)) ?? winSidecarCandidates[0]
+if (winSidecarSource === winSidecarCandidates[1]) {
+  console.warn(
+    'electron-builder: using the MSVC-built xlsx sidecar (native Windows build); ' +
+      'MinGW cross builds stay at the x86_64-pc-windows-gnu path',
+  )
+}
+
 const updateUrl = process.env.GENOFFICE_UPDATE_URL
 
 // GENOFFICE_MAC_X64=1 — opt into packaging the Intel (x64) dmg/zip alongside
@@ -254,7 +274,7 @@ const config = {
     ],
     extraResources: [
       {
-        from: '../sheets/native/xlsx-engine/target/x86_64-pc-windows-gnu/release/xlsx-sidecar.exe',
+        from: winSidecarSource,
         to: 'native/xlsx-sidecar.exe',
       },
     ],
