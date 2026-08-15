@@ -1588,7 +1588,10 @@ export function registerSlidesIpc(): void {
           ...(imageFailures.length > 0 ? { imageFailures } : {}),
         }
       } catch (err) {
-        return { error: err instanceof Error ? err.message : String(err) }
+        const msg = err instanceof Error ? err.message : String(err)
+        // landing failures otherwise only reach the renderer, which paraphrases them
+        console.error('[html-to-pptx] failed:', msg)
+        return { error: msg }
       }
     },
   )

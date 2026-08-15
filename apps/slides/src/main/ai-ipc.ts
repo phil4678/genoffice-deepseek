@@ -166,6 +166,9 @@ export function registerAiIpc(): void {
 // never called; docs does not have these channels, so putting them in the wrong place raises
 // "No handler registered".
 export function registerSlidesOnlyAiIpc(): void {
+  // Startup marker for dev debugging: if this line is missing from the `npm run dev`
+  // terminal, the running main process predates the local deck-generation code.
+  console.log('[slides-ai] local deck generation active (ai-override + html-page converter)')
   // Optional slides-generation model override: SLIDES_AI_BASE_URL + SLIDES_AI_MODEL route
   // the deck-generation LLM steps through a different OpenAI-compatible endpoint (e.g.
   // OpenRouter or a local Ollama server) while the rest of the suite keeps its provider.
