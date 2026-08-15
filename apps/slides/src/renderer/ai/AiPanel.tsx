@@ -937,13 +937,20 @@ export function AiPanel({
           }
           return {
             ok: false,
-            error:
-              'error' in (res || {})
-                ? (res as { error: string }).error
-                : tGlobal('aiErrGenerateFailed'),
+            error: (() => {
+              const err =
+                'error' in (res || {})
+                  ? (res as { error: string }).error
+                  : tGlobal('aiErrGenerateFailed')
+              // visible in the dev console: landing failures are otherwise only paraphrased
+              console.warn('[generate-from-html] failed', { mode, error: err })
+              return err
+            })(),
           }
         } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : String(e) }
+          const err = e instanceof Error ? e.message : String(e)
+          console.warn('[generate-from-html] threw', { mode, error: err })
+          return { ok: false, error: err }
         }
       },
       regenerateSlide: async (slideIndex: number, html: string) => {
@@ -1066,10 +1073,21 @@ export function AiPanel({
             args.signal,
             8192,
           )
-          if (!r.ok || !r.text) return { ok: false, error: r.error ?? tGlobal('aiErrEmptyOutput') }
+          if (!r.ok || !r.text) {
+            const err = r.error ?? tGlobal('aiErrEmptyOutput')
+            // visible in the dev console: the agent only paraphrases this in the panel
+            console.warn('[generate-page-local] failed', {
+              pageIndex: args.pageIndex,
+              errKind: r.errKind,
+              error: err,
+            })
+            return { ok: false, error: err }
+          }
           return { ok: true, html: extractHtmlPage(r.text) }
         } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : String(e) }
+          const err = e instanceof Error ? e.message : String(e)
+          console.warn('[generate-page-local] threw', { pageIndex: args.pageIndex, error: err })
+          return { ok: false, error: err }
         }
       },
       // ── In-tool planning: given topic+page count, the LLM produces a structured outline (batched recursion scheduled by the skill).
