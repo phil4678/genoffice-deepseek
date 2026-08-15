@@ -1,7 +1,6 @@
 import type { AgentMessage, AgentToolCall, AgentToolDef } from '@genoffice/agent-core'
 import { aiFetch } from './fetch'
 import { httpBodyDetail } from './http-error'
-import { GENSPARK_LLM_BASE_URLS, gensparkAttributionHeaders } from './providers'
 import type { AiProviderConfig, AiProviderId } from './types'
 import { createStreamWatchdog, type StreamWatchdog } from './watchdog'
 
@@ -93,11 +92,11 @@ function sseErrorText(error: unknown, fallback: string): string {
 }
 
 /**
- * Gateways can answer a `stream: true` request with a complete non-SSE JSON body —
- * observed on the Genspark Anthropic route when credits are exhausted (HTTP 200,
- * Content-Type: application/json, the notice text inside a regular message). The SSE
- * parser would find no `data:` lines in such a body and dissolve it into an empty
- * "successful" turn. Returns the body text when that happens, else null.
+ * Gateways can answer a `stream: true` request with a complete non-SSE JSON body
+ * (HTTP 200, Content-Type: application/json, the notice text inside a regular
+ * message). The SSE parser would find no `data:` lines in such a body and dissolve
+ * it into an empty "successful" turn. Returns the body text when that happens,
+ * else null.
  */
 async function jsonBodyInsteadOfSse(response: Response): Promise<string | null> {
   const contentType = response.headers.get('content-type') ?? ''
@@ -106,9 +105,8 @@ async function jsonBodyInsteadOfSse(response: Response): Promise<string | null> 
 
 /**
  * A non-SSE JSON reply whose text is the gateway's credits-exhausted notice
- * (Genspark: "Your Genspark credits have been exhausted…") surfaces as a typed
- * error so the apps show a localized "top up" message (errorCode 'credits')
- * instead of the English notice as a normal assistant reply.
+ * surfaces as a typed error so the apps show a localized "top up" message
+ * (errorCode 'credits') instead of the English notice as a normal assistant reply.
  */
 export class AiCreditsError extends Error {
   constructor(notice: string) {
@@ -120,9 +118,7 @@ export class AiCreditsError extends Error {
 function creditsNoticeText(value: unknown): string | null {
   if (typeof value === 'string') {
     const t = value.toLowerCase()
-    const credits =
-      t.includes('genspark.ai/pricing') ||
-      (t.includes('credit') && (t.includes('exhausted') || t.includes('insufficient')))
+    const credits = t.includes('credit') && (t.includes('exhausted') || t.includes('insufficient'))
     return credits ? value : null
   }
   if (Array.isArray(value) || (value && typeof value === 'object')) {
@@ -284,7 +280,6 @@ async function anthropicTurn(
         // which adds browser-semantics headers; Anthropic rejects those with 403 "Request not
         // allowed". This header is the official opt-in for browser/Electron environments.
         'anthropic-dangerous-direct-browser-access': 'true',
-        ...gensparkAttributionHeaders(baseUrl),
       },
       body: JSON.stringify({
         model: config.model,
@@ -513,7 +508,6 @@ async function geminiTurn(
     headers: {
       'Content-Type': 'application/json',
       'x-goog-api-key': config.apiKey,
-      ...gensparkAttributionHeaders(baseUrl),
     },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
@@ -603,11 +597,13 @@ async function geminiTurn(
 
 // ---- OpenAI-compatible (openai / deepseek / custom) ----
 
-function openAiMessages(system: string, messages: AgentMessage[]): unknown[] {
+function openAiMessages(system: string, messages: AgentMessage[], stripImages: boolean): unknown[] {
   const out: unknown[] = [{ role: 'system', content: system }]
   for (const m of messages) {
     if (m.role === 'user') {
-      if (!m.images?.length) {
+      // Text-only providers (DeepSeek V4) reject image blocks; drop them rather
+      // than failing the whole turn.
+      if (!m.images?.length || stripImages) {
         out.push({ role: 'user', content: m.text })
       } else {
         out.push({
@@ -699,10 +695,11 @@ export async function streamOpenAiCompatible(
   tools: AgentToolDef[],
   maxTokens: number,
   cb: StreamCallbacks,
+  stripImages = false,
 ): Promise<void> {
   const wd = createStreamWatchdog(cb.signal)
   return wd.guard(() =>
-    openAiCompatibleTurn(baseUrl, config, system, messages, tools, maxTokens, cb, wd),
+    openAiCompatibleTurn(baseUrl, config, system, messages, tools, maxTokens, cb, wd, stripImages),
   )
 }
 
@@ -715,6 +712,7 @@ async function openAiCompatibleTurn(
   maxTokens: number,
   cb: StreamCallbacks,
   wd: StreamWatchdog,
+  stripImages: boolean,
 ): Promise<void> {
   const onBytes = () => {
     wd.touch()
@@ -726,12 +724,11 @@ async function openAiCompatibleTurn(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`,
-      ...gensparkAttributionHeaders(baseUrl),
     },
     body: JSON.stringify({
       model: config.model,
       max_tokens: maxTokens,
-      messages: openAiMessages(system, messages),
+      messages: openAiMessages(system, messages, stripImages),
       ...(tools.length > 0
         ? {
             tools: tools.map((t) => ({
@@ -838,10 +835,10 @@ async function openAiCompatibleTurn(
   if (stopReason) cb.onStopReason?.(stopReason)
 }
 
-const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<AiProviderId, string>> = {
+const OPENAI_COMPATIBLE_BASE_URLS = {
   deepseek: 'https://api.deepseek.com/v1',
   openai: 'https://api.openai.com/v1',
-}
+} as const
 
 /** route a streaming, tool-calling-capable turn by provider id */
 export async function streamForProvider(
@@ -854,48 +851,25 @@ export async function streamForProvider(
   cb: StreamCallbacks,
 ): Promise<void> {
   switch (provider) {
-    case 'genspark':
-      // The proxy exposes three protocol-specific endpoints; route by model id prefix: claude uses
-      // the Anthropic protocol (preserves image input fidelity), gemini uses Gemini, rest OpenAI-compatible
-      if (config.model.startsWith('claude')) {
-        return streamAnthropic(
-          config,
-          system,
-          messages,
-          tools,
-          maxTokens,
-          cb,
-          GENSPARK_LLM_BASE_URLS.anthropic,
-        )
-      }
-      if (config.model.startsWith('gemini')) {
-        return streamGemini(
-          config,
-          system,
-          messages,
-          tools,
-          maxTokens,
-          cb,
-          GENSPARK_LLM_BASE_URLS.gemini,
-        )
-      }
+    case 'anthropic':
+      return streamAnthropic(config, system, messages, tools, maxTokens, cb)
+    case 'gemini':
+      return streamGemini(config, system, messages, tools, maxTokens, cb)
+    case 'deepseek':
+      // DeepSeek V4 is text-only: drop attached images instead of failing the turn
       return streamOpenAiCompatible(
-        GENSPARK_LLM_BASE_URLS.openai,
+        OPENAI_COMPATIBLE_BASE_URLS.deepseek,
         config,
         system,
         messages,
         tools,
         maxTokens,
         cb,
+        true,
       )
-    case 'anthropic':
-      return streamAnthropic(config, system, messages, tools, maxTokens, cb)
-    case 'gemini':
-      return streamGemini(config, system, messages, tools, maxTokens, cb)
-    case 'deepseek':
     case 'openai':
       return streamOpenAiCompatible(
-        OPENAI_COMPATIBLE_BASE_URLS[provider]!,
+        OPENAI_COMPATIBLE_BASE_URLS.openai,
         config,
         system,
         messages,

@@ -4,7 +4,7 @@ import { AI_PROVIDERS, defaultAiSettings, resolveAiSettings } from '../src/provi
 describe('defaultAiSettings', () => {
   it('gives every provider its default model and an empty key by default', () => {
     const settings = defaultAiSettings()
-    expect(settings.provider).toBe('genspark')
+    expect(settings.provider).toBe('deepseek')
     for (const meta of AI_PROVIDERS) {
       expect(settings.providers[meta.id].apiKey).toBe('')
       expect(settings.providers[meta.id].model).toBe(meta.defaultModel)
@@ -58,8 +58,57 @@ describe('resolveAiSettings', () => {
       defaults,
     )
     expect(resolved.provider).toBe('gemini')
-    expect(resolved.providers.gemini).toEqual({ apiKey: 'stored-gemini-key', model: 'gemini-2.5-pro' })
+    expect(resolved.providers.gemini).toEqual({
+      apiKey: 'stored-gemini-key',
+      model: 'gemini-2.5-pro',
+    })
     // provider not mentioned in stored.providers keeps the computed default
     expect(resolved.providers.anthropic.apiKey).toBe('preset-key')
+  })
+
+  it('migrates a stored genspark provider selection to deepseek', () => {
+    const resolved = resolveAiSettings(
+      {
+        provider: 'genspark' as never,
+        providers: {
+          genspark: { apiKey: 'stored-gsk-key', model: 'claude-opus-4-7' },
+        } as never,
+      },
+      defaultAiSettings(),
+    )
+    expect(resolved.provider).toBe('deepseek')
+    expect(resolved.providers.deepseek.model).toBe('deepseek-v4-pro')
+    expect(resolved.providers.deepseek.apiKey).toBe('')
+  })
+
+  it('preserves a stored deepseek config through the genspark migration', () => {
+    const resolved = resolveAiSettings(
+      {
+        provider: 'genspark' as never,
+        providers: {
+          deepseek: { apiKey: 'sk-stored', model: 'deepseek-v4-flash' },
+        } as never,
+      },
+      defaultAiSettings(),
+    )
+    expect(resolved.provider).toBe('deepseek')
+    expect(resolved.providers.deepseek).toEqual({ apiKey: 'sk-stored', model: 'deepseek-v4-flash' })
+  })
+
+  it('remaps retired deepseek model aliases to the v4 default', () => {
+    const defaults = defaultAiSettings()
+    for (const retired of ['deepseek-chat', 'deepseek-reasoner'] as const) {
+      const resolved = resolveAiSettings(
+        {
+          provider: 'deepseek',
+          providers: {
+            deepseek: { apiKey: 'sk-stored', model: retired },
+          } as never,
+        },
+        defaults,
+      )
+      expect(resolved.providers.deepseek.model).toBe('deepseek-v4-pro')
+      expect(resolved.providers.deepseek.apiKey).toBe('sk-stored')
+    }
   })
 })
