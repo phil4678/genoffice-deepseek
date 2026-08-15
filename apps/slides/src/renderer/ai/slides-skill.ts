@@ -2833,7 +2833,7 @@ async function executeTool(
               pageErrors[pageIndex - 1] = undefined
               return res.html
             }
-            lastErr = res.error ?? t('aiErrUnknown')
+            lastErr = `local page generation: ${res.error ?? t('aiErrUnknown')}`
           }
         }
         pageErrors[pageIndex - 1] = lastErr
@@ -2999,9 +2999,10 @@ async function executeTool(
           total: 0,
           summary: t('aiStageAllFailed', { n: total }),
         })
+        const firstErr = pageErrors.find((e) => e)
         return fail(
           t('aiFailGenDeck'),
-          `All ${total} pages failed to generate; retry or check the AI model configuration.`,
+          `All ${total} pages failed to generate (first error: ${firstErr ?? 'unknown'}). Retry or check the AI model configuration.`,
         )
       }
 

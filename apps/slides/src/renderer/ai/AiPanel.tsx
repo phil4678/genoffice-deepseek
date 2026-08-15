@@ -1081,7 +1081,8 @@ export function AiPanel({
               errKind: r.errKind,
               error: err,
             })
-            return { ok: false, error: err }
+            // the errKind also rides into the tool error so the panel shows it
+            return { ok: false, error: r.errKind ? `${r.errKind}: ${err}` : err }
           }
           return { ok: true, html: extractHtmlPage(r.text) }
         } catch (e) {
