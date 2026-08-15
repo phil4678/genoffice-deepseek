@@ -509,7 +509,10 @@ export function AiPanel({
       .then((ov) => {
         genOverrideRef.current = ov as { baseUrl: string; model: string; apiKey?: string } | null
       })
-      .catch(() => {})
+      .catch((e) => {
+        // visible in the dev console: usually a stale preload (missing slides:ai-override bridge)
+        console.warn('slides:ai-override fetch failed — stale preload?', e)
+      })
   }, [])
   const imagesRef = useRef(images)
   imagesRef.current = images
