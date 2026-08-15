@@ -32,6 +32,12 @@ upstream — see [Syncing with upstream](#syncing-with-upstream).
   or local Ollama), independent of the suite-wide provider. The slides skill
   prompt also carries a built-in design system (palettes, typography, layout
   library) tuned for local generation.
+- **Deck generation is fully local** (no Genspark cloud): `generate_deck` /
+  `regenerate_slide` write each page's HTML with the generation model and a
+  local converter (`apps/slides/src/main/html-page.ts`) turns it into real
+  editable pptx elements — textboxes, cards, backgrounds, and downloaded
+  images (failed fetches degrade to a gray placeholder). The Genspark cloud
+  path remains for upstream parity when a gsk login exists.
 
 ### Developer experience (Windows)
 

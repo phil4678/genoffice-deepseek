@@ -151,6 +151,7 @@ import {
   type Slide,
   type TextElement,
 } from '@genoffice/pptx-engine'
+import { htmlStringToSlidePptx } from './html-page'
 import { buildRenderSlide, EMU_PER_PX_96, type RenderSlide } from '@genoffice/pptx-render'
 import { refineComplexWidths, shapedMetricsReady } from './shaped-metrics'
 import { applyEditParagraphs, collectParagraphFormatPatches, levelsChanged } from './edit-text'
@@ -1368,24 +1369,37 @@ export function registerSlidesIpc(): void {
         })
       | { error: string }
     > => {
-      // Every page arrives as a cloud marker (cloudpptx:<path> written by
-      // slides:cloud-page-generate, pointing at a one-slide pptx temp file); this handler only
-      // reads and lands the bytes.
+      // Every page arrives either as a cloud marker (cloudpptx:<path> written by
+      // slides:cloud-page-generate, pointing at a one-slide pptx temp file) or as a
+      // dialect-HTML string written by the local page generation (htmlStringToSlidePptx
+      // converts it to one-slide pptx bytes). This handler reads and lands the bytes.
       // replace: assemble the whole batch into one multi-page pptx as the new deck base.
       // append: merge the "new pages" one by one into the existing deck via mergeSlideFromPptx
       // (earlier pages are untouched).
-      const readCloudPage = async (marker: string): Promise<{ bytes: Uint8Array }> => {
-        if (!marker.startsWith(CLOUD_PAGE_PREFIX)) throw new Error('expected a cloud page marker')
-        const path = marker.slice(CLOUD_PAGE_PREFIX.length)
-        if (!issuedCloudPages.has(path)) throw new Error('unknown cloud page marker')
-        return { bytes: new Uint8Array(await readFile(path)) }
+      const readPageBytes = async (
+        page: string,
+      ): Promise<{ bytes: Uint8Array; imageFailures: { page: number; url: string }[] }> => {
+        if (page.startsWith(CLOUD_PAGE_PREFIX)) {
+          const path = page.slice(CLOUD_PAGE_PREFIX.length)
+          if (!issuedCloudPages.has(path)) throw new Error('unknown cloud page marker')
+          return { bytes: new Uint8Array(await readFile(path)), imageFailures: [] }
+        }
+        return htmlStringToSlidePptx(page)
       }
-      const assembleDeck = async (): Promise<{ bytes: Uint8Array }> => {
-        const perPage = await Promise.all(pagesHtml.map(readCloudPage))
+      const assembleDeck = async (): Promise<{
+        bytes: Uint8Array
+        imageFailures: { page: number; url: string }[]
+      }> => {
+        const perPage = await Promise.all(pagesHtml.map(readPageBytes))
         const base = await openPptx(perPage[0]!.bytes)
         for (const one of perPage.slice(1)) await mergeSlideFromPptx(base, one.bytes)
         for (const s of base.deck.slides) promoteSlideBackground(s, base.deck.size)
-        return { bytes: await savePptx(base) }
+        return {
+          bytes: await savePptx(base),
+          imageFailures: perPage.flatMap((p, i) =>
+            p.imageFailures.map((f) => ({ ...f, page: i + 1 })),
+          ),
+        }
       }
 
       try {
@@ -1405,9 +1419,11 @@ export function registerSlidesIpc(): void {
           pushHistory(existing)
           let merged = 0
           let lastErr: string | undefined
+          const imageFailures: { page: number; url: string }[] = []
           for (const html of pagesHtml) {
             try {
-              const one = await readCloudPage(html)
+              const one = await readPageBytes(html)
+              imageFailures.push(...one.imageFailures)
               const slide = await mergeSlideFromPptx(opened, one.bytes)
               if (slide) {
                 promoteSlideBackground(slide, opened.deck.size)
@@ -1438,6 +1454,7 @@ export function registerSlidesIpc(): void {
             size: { cx: existing.opened.deck.size.cx, cy: existing.opened.deck.size.cy },
             defaultFont: deckDefaultFont(existing.opened),
             appendedFrom: beforeCount,
+            ...(imageFailures.length > 0 ? { imageFailures } : {}),
             ...(lastErr && merged < pagesHtml.length
               ? { fallbackReason: tm('errPartialAppend', { reason: lastErr }) }
               : {}),
@@ -1462,7 +1479,7 @@ export function registerSlidesIpc(): void {
           if (!html || pagesHtml.length !== 1) {
             return { error: tm('errReplaceNeedsOne') }
           }
-          const one = await readCloudPage(html)
+          const one = await readPageBytes(html)
           pushHistory(existing)
           const rollback = () => {
             const snap = existing.undoStack.pop()
@@ -1492,6 +1509,7 @@ export function registerSlidesIpc(): void {
             size: { cx: existing.opened.deck.size.cx, cy: existing.opened.deck.size.cy },
             defaultFont: deckDefaultFont(existing.opened),
             replacedIndex: atIndex,
+            ...(one.imageFailures.length > 0 ? { imageFailures: one.imageFailures } : {}),
           }
         }
 
@@ -1512,7 +1530,7 @@ export function registerSlidesIpc(): void {
           if (!html || pagesHtml.length !== 1) {
             return { error: tm('errInsertNeedsOne') }
           }
-          const one = await readCloudPage(html)
+          const one = await readPageBytes(html)
           pushHistory(existing)
           const rollback = () => {
             const snap = existing.undoStack.pop()
@@ -1542,11 +1560,12 @@ export function registerSlidesIpc(): void {
             size: { cx: existing.opened.deck.size.cx, cy: existing.opened.deck.size.cy },
             defaultFont: deckDefaultFont(existing.opened),
             insertedIndex: atIndex,
+            ...(one.imageFailures.length > 0 ? { imageFailures: one.imageFailures } : {}),
           }
         }
 
         // replace mode: assemble the whole batch into one multi-page pptx as the new deck base.
-        const { bytes } = await assembleDeck()
+        const { bytes, imageFailures } = await assembleDeck()
         const opened = await openPptx(bytes)
         // With per-page conversion + merging, stored PageVisualData is no longer needed; append reads the opened deck directly.
         const replaceSession: Session = {
@@ -1566,6 +1585,7 @@ export function registerSlidesIpc(): void {
           slides: buildAllRenderSlides(opened, fitWidthPx),
           size: { cx: opened.deck.size.cx, cy: opened.deck.size.cy },
           defaultFont: deckDefaultFont(opened),
+          ...(imageFailures.length > 0 ? { imageFailures } : {}),
         }
       } catch (err) {
         return { error: err instanceof Error ? err.message : String(err) }

@@ -57,6 +57,31 @@ interface ToolActivity {
 /** Max stored chars of tool output (UI-side truncation, doesn't affect what the LLM receives) */
 const TOOL_OUTPUT_MAX_CHARS = 2000
 
+/**
+ * System prompt for local per-page generation: one slide in the constrained HTML
+ * dialect the local converter (apps/slides/src/main/html-page.ts) understands.
+ */
+const PAGE_HTML_SYSTEM = `You are a professional slide designer. Output ONE slide as HTML using EXACTLY this dialect (the output is parsed by a converter, not a browser):
+
+- One full-canvas background div first: <div style="position:absolute;left:0;top:0;width:1280px;height:720px;background-color:#HEX"></div>
+- Every other element: <div> or <p> with position:absolute; left/top/width/height in px, inside the 1280x720 canvas.
+- Text containers: put the text directly inside the block; style with inline CSS on the container or on <span>/<b>/<i> runs: color:#RRGGBB, font-size:NNpx (1px = 1pt), font-weight:bold, font-style:italic, text-decoration:underline. Optional font-family.
+- Colored cards: background-color:#RRGGBB on the block; rounded corners with border-radius:NNpx; outline with border:1px solid #RRGGBB.
+- Images: <img src="..."> ONLY for URLs provided in the prompt; the img sits in its own absolutely-positioned block with the desired width/height. Never invent URLs and never fake images.
+- Solid hex colors ONLY (no gradients/rgba/named colors); no CSS classes, no <style>/<script>, no flexbox/grid — absolute positioning only.
+- Layout rules: >=48px margins, >=24px gutters, >=12px inner padding; ONE focal point; title zone top-left or top-center; left-align body text, center only titles/quotes; leave ~15% extra height in every text container (text must never overflow); elements must not overlap.
+- Real content only: use the exact names/figures from the brief and reference material — no "XX%", no lorem ipsum, no placeholder text.
+- Output ONLY the HTML. No code fences, no preamble, no explanation.`
+
+/** Strip markdown fences and any prose around the page HTML before conversion. */
+function extractHtmlPage(text: string): string {
+  const fenced = /```(?:html)?\s*([\s\S]*?)```/i.exec(text)
+  if (fenced) return fenced[1]!.trim()
+  const start = text.indexOf('<')
+  const end = text.lastIndexOf('>')
+  return start >= 0 && end > start ? text.slice(start, end + 1).trim() : text.trim()
+}
+
 /** Clipboard bitmap MIME → attachment extension (matches ATTACHMENT_IMAGE_EXTS) */
 const PASTE_MIME_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -990,6 +1015,56 @@ export function AiPanel({
             height: args.canvasH,
           })
           return res ?? { ok: false, error: tGlobal('aiErrUnknown') }
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) }
+        }
+      },
+      // ── Local per-page generation (no Genspark): one LLM call writes the page's HTML in the
+      // dialect the local converter (html-page.ts) understands; slides:html-to-pptx converts it.
+      generatePageLocal: async (args) => {
+        try {
+          // Resolve image entries: URLs pass through; keywords get one searchImages round
+          const resolved: string[] = []
+          const keywords: string[] = []
+          for (const entry of args.images) {
+            if (/^https?:\/\//.test(entry)) resolved.push(entry)
+            else if (entry.trim()) keywords.push(entry)
+          }
+          for (const kw of keywords.slice(0, 4)) {
+            try {
+              const r = await window.slidesApi.imageSearch(kw, 3)
+              for (const url of r.images.map((im) => im.imageUrl).filter(Boolean)) {
+                if (!resolved.includes(url)) resolved.push(url)
+              }
+            } catch {
+              /* image search is best-effort; the page still generates without images */
+            }
+          }
+          const blocks = [
+            `Page ${args.pageIndex} of ${args.totalPages}.`,
+            `Title: ${args.title || '(untitled)'}`,
+            `Layout intent: ${args.layout || 'not specified'}`,
+            `Canvas: ${args.canvasW}x${args.canvasH}px.`,
+            args.coreHook ? `Deck core hook: ${args.coreHook}` : '',
+            `Design system (follow strictly; all colors must come from this palette):\n${args.style}`,
+            `Brief (real content only — every name/number comes from here or the context below):\n${args.brief}`,
+            args.context
+              ? `Reference material (all real names/figures/facts come from here; do not invent):\n${args.context}`
+              : '',
+            resolved.length > 0
+              ? `Available image URLs (use ONLY these in <img src="...">; never invent URLs):\n${resolved.join('\n')}`
+              : 'No images are available for this page; design with typography and shapes only.',
+          ].filter(Boolean)
+          const r = await runLlmOnce(
+            PAGE_HTML_SYSTEM,
+            blocks.join('\n\n'),
+            undefined,
+            true,
+            args.signal,
+            8192,
+          )
+          if (!r.ok || !r.text) return { ok: false, error: r.error ?? tGlobal('aiErrEmptyOutput') }
+          return { ok: true, html: extractHtmlPage(r.text) }
         } catch (e) {
           return { ok: false, error: e instanceof Error ? e.message : String(e) }
         }

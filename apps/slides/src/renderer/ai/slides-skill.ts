@@ -130,6 +130,28 @@ export interface DeckAccess {
     signal?: AbortSignal
   }): Promise<{ ok: boolean; marker?: string; error?: string }>
   /**
+   * Local single-page generation (no Genspark): one LLM call (SLIDES_AI override,
+   * else the user's model) writes this page's dialect HTML — same brief/style/layout
+   * inputs as generatePageCloud. `images` entries may be URLs or English search
+   * keywords (resolved via searchImages). The returned HTML string flows through
+   * generateFromHtml, which converts it locally.
+   */
+  generatePageLocal?(args: {
+    pageIndex: number
+    totalPages: number
+    coreHook: string
+    style: string
+    title: string
+    brief: string
+    layout: string
+    images: string[]
+    context?: string
+    topic?: string
+    canvasW: number
+    canvasH: number
+    signal?: AbortSignal
+  }): Promise<{ ok: boolean; html?: string; error?: string }>
+  /**
    * In-tool Style Skill generation:
    * a dedicated LLM call focused on producing a complete structured visual style guide
    * (color rules/fonts/layout variants per page type/overall style). Promotes style from an
@@ -2303,10 +2325,17 @@ async function executeTool(
       const idx = Number(call.input.slideIndex)
       if (!slides[idx])
         return fail(t('aiFailRegen'), `slideIndex out of range (0-${slides.length - 1})`)
-      if (!access.regenerateSlide || !access.generatePageCloud)
+      if (!access.regenerateSlide)
         return fail(
           t('aiFailRegen'),
           'The current environment does not support the page-redo pipeline',
+        )
+      const cloudOk =
+        !!access.generatePageCloud && (await access.isCloudPageGenEnabled?.().catch(() => false))
+      if (!cloudOk && !access.generatePageLocal)
+        return fail(
+          t('aiFailRegen'),
+          'Cloud page generation is unavailable — sign in to Genspark (gsk) first',
         )
       const brief = String(call.input.brief ?? '').trim()
       if (!brief) return fail(t('aiFailRegen'), 'brief must not be empty')
@@ -2318,13 +2347,14 @@ async function executeTool(
       const regenImages = Array.isArray(call.input.image_urls)
         ? (call.input.image_urls as unknown[]).map(String).filter((u) => /^https?:\/\//.test(u))
         : []
-      // Cloud generation, one retry then give up (same semantics as generate_deck pages)
+      // Page generation (cloud marker or local HTML), one retry then give up
+      // (same semantics as generate_deck pages)
       const backoff = access.retryBackoffMs ?? 2000
-      let marker: string | null = null
+      let page: string | null = null
       let lastErr = ''
-      for (let attempt = 0; attempt < 2 && !marker; attempt++) {
+      for (let attempt = 0; attempt < 2 && !page; attempt++) {
         if (attempt > 0 && backoff > 0) await new Promise((r) => setTimeout(r, backoff))
-        const res = await access.generatePageCloud({
+        const args = {
           pageIndex: idx + 1,
           totalPages: slides.length,
           coreHook: '',
@@ -2335,16 +2365,23 @@ async function executeTool(
           images: regenImages,
           canvasW: 1280,
           canvasH: 720,
-        })
-        if (res.ok && res.marker) marker = res.marker
-        else lastErr = res.error ?? t('aiErrUnknown')
+        }
+        if (cloudOk) {
+          const res = await access.generatePageCloud!(args)
+          if (res.ok && res.marker) page = res.marker
+          else lastErr = res.error ?? t('aiErrUnknown')
+        } else {
+          const res = await access.generatePageLocal!(args)
+          if (res.ok && res.html) page = res.html
+          else lastErr = res.error ?? t('aiErrUnknown')
+        }
       }
-      if (!marker)
+      if (!page)
         return fail(
           t('aiFailRegen'),
-          `Cloud page generation failed (2 attempts): ${lastErr}. This is usually a temporary cloud service error — do not keep calling regenerate_slide in a loop. Instead, make the requested changes in place with execute_slide_script / set_element_* (group children are editable too), or tell the user to retry in a few minutes. The page was not modified.`,
+          `Page generation failed (2 attempts): ${lastErr}. Do not keep calling regenerate_slide in a loop. Instead, make the requested changes in place with execute_slide_script / set_element_* (group children are editable too), or tell the user to retry. The page was not modified.`,
         )
-      const r = await access.regenerateSlide(idx, marker)
+      const r = await access.regenerateSlide(idx, page)
       if (!r.ok)
         return fail(
           t('aiFailRegen'),
@@ -2353,7 +2390,7 @@ async function executeTool(
       if (state) state.htmlGenerated = true
       return {
         output:
-          `Redid page ${idx + 1} in place from the brief via cloud generation (other pages untouched; the user can undo). Fine-tune afterwards with execute_slide_script / set_element_* tools.` +
+          `Redid page ${idx + 1} in place from the brief (other pages untouched; the user can undo). Fine-tune afterwards with execute_slide_script / set_element_* tools.` +
           imageFailNote(r.imageFailures),
         mutated: true,
         summary: t('aiSumRegen', { n: idx + 1 }),
@@ -2379,8 +2416,12 @@ async function executeTool(
     case 'generate_deck': {
       // ── Self-driven pipeline:
       //   1) Plan: use pages if passed; with topic, the tool plans the outline via LLM (batched recursion over threshold) — fixes missing pages at the input side.
-      //   2) Generate: batched concurrent cloud page generation (gsk slide_generate, one retry per page), **each batch lands immediately → frontend shows pages one by one**.
-      if (!access.generatePageCloud || !(await access.isCloudPageGenEnabled?.().catch(() => false)))
+      //   2) Generate: batched concurrent page generation (**each batch lands immediately → frontend shows pages one by one**).
+      //      Cloud (gsk slide_generate, one retry per page) when available; otherwise local
+      //      per-page HTML written by the LLM and converted by generateFromHtml.
+      const cloudOk =
+        !!access.generatePageCloud && (await access.isCloudPageGenEnabled?.().catch(() => false))
+      if (!cloudOk && !access.generatePageLocal)
         return fail(
           t('aiFailGenDeck'),
           'Cloud slide generation is unavailable — sign in to Genspark (gsk) first',
@@ -2740,37 +2781,60 @@ async function executeTool(
           summary: t('aiStagePageRunning', { n: pageIndex, total }),
           pages: [...pageProgressItems],
         })
-        const images = Array.isArray(p.image_queries)
-          ? (p.image_queries as unknown[])
-              .map((x) => String(x))
-              .filter((x) => /^https?:\/\//.test(x))
+        const rawImages = Array.isArray(p.image_queries)
+          ? (p.image_queries as unknown[]).map((x) => String(x))
           : []
+        const images = rawImages.filter((x) => /^https?:\/\//.test(x))
         let lastErr = ''
         // One retry, then the page is skipped (marked failed in the progress card and the
         // final summary) and the rest of the deck keeps generating.
         for (let attempt = 0; attempt < 2; attempt++) {
           if (cancelled()) return null
           if (attempt > 0 && BACKOFF_MS > 0) await new Promise((r) => setTimeout(r, BACKOFF_MS))
-          const res = await access.generatePageCloud!({
-            pageIndex,
-            totalPages: total,
-            coreHook,
-            style: styleSkill,
-            title: String(p.title ?? ''),
-            brief: String(p.brief ?? ''),
-            layout: String(p.layout ?? ''),
-            images,
-            ...(pageContext ? { context: pageContext } : {}),
-            ...(topic ? { topic } : {}),
-            canvasW,
-            canvasH,
-            ...(signal ? { signal } : {}),
-          })
-          if (res.ok && res.marker) {
-            pageErrors[pageIndex - 1] = undefined
-            return res.marker
+          if (cloudOk) {
+            const res = await access.generatePageCloud!({
+              pageIndex,
+              totalPages: total,
+              coreHook,
+              style: styleSkill,
+              title: String(p.title ?? ''),
+              brief: String(p.brief ?? ''),
+              layout: String(p.layout ?? ''),
+              images,
+              ...(pageContext ? { context: pageContext } : {}),
+              ...(topic ? { topic } : {}),
+              canvasW,
+              canvasH,
+              ...(signal ? { signal } : {}),
+            })
+            if (res.ok && res.marker) {
+              pageErrors[pageIndex - 1] = undefined
+              return res.marker
+            }
+            lastErr = res.error ?? t('aiErrUnknown')
+          } else {
+            const res = await access.generatePageLocal!({
+              pageIndex,
+              totalPages: total,
+              coreHook,
+              style: styleSkill,
+              title: String(p.title ?? ''),
+              brief: String(p.brief ?? ''),
+              layout: String(p.layout ?? ''),
+              // keywords are resolved by the local generator (searchImages); URLs pass through
+              images: rawImages,
+              ...(pageContext ? { context: pageContext } : {}),
+              ...(topic ? { topic } : {}),
+              canvasW,
+              canvasH,
+              ...(signal ? { signal } : {}),
+            })
+            if (res.ok && res.html) {
+              pageErrors[pageIndex - 1] = undefined
+              return res.html
+            }
+            lastErr = res.error ?? t('aiErrUnknown')
           }
-          lastErr = res.error ?? t('aiErrUnknown')
         }
         pageErrors[pageIndex - 1] = lastErr
         return null
