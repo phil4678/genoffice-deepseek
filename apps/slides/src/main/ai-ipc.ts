@@ -4,7 +4,7 @@
  * to avoid renderer CORS), search tools, and the slides-only ai:* channels
  * (image generation, media analysis, style templates).
  */
-import { app, ipcMain, net, shell } from 'electron'
+import { app, ipcMain, net } from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -17,18 +17,14 @@ import {
   type AiSettings,
   type AiStreamChunk,
   type AiStreamRequest,
-  type GenSparkAccountStatus,
   type LegacyAiSettings,
 } from '@genoffice/ai-provider'
 import { fetchRemoteImage } from '@genoffice/electron-utils'
 import {
   webSearch,
   imageSearch,
-  ensureGenofficeLogin,
-  gskApiKey,
   gskGenerateImage,
   gskAnalyzeMedia,
-  gskLoginInfo,
   hasGskAuth,
 } from '@genoffice/ai-search'
 import { addPicture, replacePictureBytes } from '@genoffice/pptx-engine'
@@ -63,24 +59,13 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:get-settings', (): AiSettings => {
     const stored = readJson<Partial<AiSettings> & LegacyAiSettings>(AI_SETTINGS_PATH(), {})
     const settings = resolveAiSettings(stored, defaultAiSettings())
-    // AI features all go through Genspark (gsk login); stored settings that chose another provider are normalized back
-    settings.provider = 'genspark'
+    // the DeepSeek key may come from the environment instead of the settings
+    // file; it is injected in-memory only and never persisted
+    const deepseek = settings.providers.deepseek
+    if (!deepseek.apiKey && process.env.DEEPSEEK_API_KEY) {
+      deepseek.apiKey = process.env.DEEPSEEK_API_KEY
+    }
     return settings
-  })
-
-  // Genspark account (gsk login state): the auth source for AI features; when logged out the frontend uses this to guide login
-  ipcMain.handle(
-    'ai:gsk-status',
-    async (_event, withEmail?: boolean): Promise<GenSparkAccountStatus> => {
-      if (!hasGskAuth()) return { loggedIn: false }
-      if (!withEmail) return { loggedIn: true }
-      const info = await gskLoginInfo()
-      return info?.email ? { loggedIn: true, email: info.email } : { loggedIn: true }
-    },
-  )
-
-  ipcMain.handle('ai:gsk-login', () => {
-    ensureGenofficeLogin((url) => void shell.openExternal(url))
   })
 
   ipcMain.handle('ai:set-settings', (_event, settings: AiSettings) => {
@@ -93,9 +78,10 @@ export function registerAiIpc(): void {
     const maxTokens = request.maxTokens ?? 8192
     const provider = settings.provider
     let config = settings.providers?.[provider]
-    // The genspark key never enters the settings file; it is fetched from the gsk login state per request
-    if (provider === 'genspark' && config && !config.apiKey) {
-      config = { ...config, apiKey: gskApiKey() }
+    // the DeepSeek key may come from the environment; injected in-memory only,
+    // never written to the settings file (covers stale renderer settings snapshots)
+    if (provider === 'deepseek' && config && !config.apiKey && process.env.DEEPSEEK_API_KEY) {
+      config = { ...config, apiKey: process.env.DEEPSEEK_API_KEY }
     }
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
@@ -104,7 +90,7 @@ export function registerAiIpc(): void {
       send({
         requestId,
         type: 'error',
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
+        error: provider === 'deepseek' ? tm('errNoDeepSeekKey') : tm('errNoApiKey', { provider }),
       })
       return
     }

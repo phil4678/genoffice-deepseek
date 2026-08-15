@@ -47,17 +47,9 @@ import {
   type AiSettings,
   type AiStreamChunk,
   type AiStreamRequest,
-  type GenSparkAccountStatus,
   type LegacyAiSettings,
 } from '@genoffice/ai-provider'
-import {
-  ensureGenofficeLogin,
-  gskApiKey,
-  gskLoginInfo,
-  hasGskAuth,
-  webSearch,
-  imageSearch,
-} from '@genoffice/ai-search'
+import { webSearch, imageSearch } from '@genoffice/ai-search'
 import type {
   AttachmentAddResult,
   AttachmentImageResult,
@@ -116,7 +108,8 @@ const tMain = createI18n({
     errParseFailed: '文件解析失败',
     errImageNoText: '图片附件不提供文本,已作为图像随用户消息发送,直接看图即可',
     errNotImage: '不是支持的图片类型',
-    errGskNotLoggedIn: '未登录 Genspark:请点击下方「登录 Genspark」完成登录后重试',
+    errNoDeepSeekKey:
+      '未配置 DeepSeek API Key:请设置 DEEPSEEK_API_KEY 环境变量,或在 ai-settings.json 中填写后重试',
     errNoApiKey: '未配置 {provider} 的 API Key',
     errNoModel: '未配置模型名称',
     menuFile: '文件',
@@ -209,8 +202,8 @@ const tMain = createI18n({
     errParseFailed: 'Failed to parse file',
     errImageNoText: 'Image attachments have no text; the image is sent along with the user message',
     errNotImage: 'not a supported image type',
-    errGskNotLoggedIn:
-      'Not signed in to Genspark: click “Sign in to Genspark” below, sign in, then retry',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'No API key configured for {provider}',
     errNoModel: 'No model name configured',
     menuFile: 'File',
@@ -303,8 +296,8 @@ const tMain = createI18n({
     errImageNoText:
       '画像の添付ファイルはテキストを提供しません。画像としてユーザーメッセージと一緒に送信されるため、そのまま画像をご確認ください',
     errNotImage: 'サポートされていない画像形式です',
-    errGskNotLoggedIn:
-      'Genspark にサインインしていません。下の「Genspark にサインイン」からサインインして再試行してください',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: '{provider} の API キーが設定されていません',
     errNoModel: 'モデル名が設定されていません',
     menuFile: 'ファイル',
@@ -398,8 +391,8 @@ const tMain = createI18n({
     errImageNoText:
       '이미지 첨부 파일은 텍스트를 제공하지 않으며, 이미지 형태로 사용자 메시지와 함께 전송되므로 이미지를 직접 확인하면 됩니다',
     errNotImage: '지원되지 않는 이미지 형식입니다',
-    errGskNotLoggedIn:
-      'Genspark에 로그인되어 있지 않습니다. 아래 "Genspark 로그인"을 눌러 로그인한 뒤 다시 시도하세요',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: '{provider}의 API 키가 설정되지 않았습니다',
     errNoModel: '모델 이름이 설정되지 않았습니다',
     menuFile: '파일',
@@ -494,8 +487,8 @@ const tMain = createI18n({
     errImageNoText:
       "Les pièces jointes image ne fournissent pas de texte ; l'image est envoyée avec le message de l'utilisateur, consultez-la directement",
     errNotImage: "type d'image non pris en charge",
-    errGskNotLoggedIn:
-      'Non connecté à Genspark : cliquez sur « Se connecter à Genspark » ci-dessous, connectez-vous puis réessayez',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Aucune clé API configurée pour {provider}',
     errNoModel: 'Aucun nom de modèle configuré',
     menuFile: 'Fichier',
@@ -590,8 +583,8 @@ const tMain = createI18n({
     errImageNoText:
       'Bildanlagen liefern keinen Text; das Bild wird mit der Benutzernachricht gesendet und kann direkt betrachtet werden',
     errNotImage: 'kein unterstütztes Bildformat',
-    errGskNotLoggedIn:
-      'Nicht bei Genspark angemeldet: Klicken Sie unten auf „Bei Genspark anmelden“, melden Sie sich an und versuchen Sie es erneut',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Kein API-Schlüssel für {provider} konfiguriert',
     errNoModel: 'Kein Modellname konfiguriert',
     menuFile: 'Datei',
@@ -685,8 +678,8 @@ const tMain = createI18n({
     errImageNoText:
       'Las imágenes adjuntas no proporcionan texto; la imagen se envía junto con el mensaje del usuario, puedes verla directamente',
     errNotImage: 'no es un tipo de imagen compatible',
-    errGskNotLoggedIn:
-      'No has iniciado sesión en Genspark: pulsa «Iniciar sesión en Genspark» abajo, inicia sesión y vuelve a intentarlo',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'No hay clave de API configurada para {provider}',
     errNoModel: 'No se ha configurado el nombre del modelo',
     menuFile: 'Archivo',
@@ -779,8 +772,8 @@ const tMain = createI18n({
     errImageNoText:
       'สิ่งที่แนบเป็นรูปภาพไม่มีข้อความ รูปจะถูกส่งไปพร้อมข้อความของผู้ใช้ ดูรูปได้โดยตรง',
     errNotImage: 'ไม่ใช่ชนิดรูปภาพที่รองรับ',
-    errGskNotLoggedIn:
-      'ยังไม่ได้ลงชื่อเข้าใช้ Genspark: แตะ “ลงชื่อเข้าใช้ Genspark” ด้านล่าง แล้วลองอีกครั้ง',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'ยังไม่ได้ตั้งค่า API Key ของ {provider}',
     errNoModel: 'ยังไม่ได้ตั้งค่าชื่อโมเดล',
     menuFile: 'ไฟล์',
@@ -874,7 +867,8 @@ const tMain = createI18n({
     errImageNoText:
       'Lampiran gambar tidak menyediakan teks; gambar dikirim bersama pesan pengguna dan dapat dilihat langsung',
     errNotImage: 'bukan jenis gambar yang didukung',
-    errGskNotLoggedIn: 'Belum masuk ke Genspark: klik “Masuk ke Genspark” di bawah, lalu coba lagi',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'API Key untuk {provider} belum dikonfigurasi',
     errNoModel: 'Nama model belum dikonfigurasi',
     menuFile: 'File',
@@ -968,8 +962,8 @@ const tMain = createI18n({
     errImageNoText:
       'Вложенные изображения не содержат текста; изображение отправляется вместе с сообщением пользователя, смотрите его напрямую',
     errNotImage: 'неподдерживаемый тип изображения',
-    errGskNotLoggedIn:
-      'Вы не вошли в Genspark: нажмите «Войти в Genspark» ниже, войдите и повторите попытку',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'API-ключ для {provider} не настроен',
     errNoModel: 'Не указано имя модели',
     menuFile: 'Файл',
@@ -1063,8 +1057,8 @@ const tMain = createI18n({
     errImageNoText:
       'مرفقات الصور لا توفر نصًا؛ تُرسل الصورة مع رسالة المستخدم ويمكن الاطلاع عليها مباشرة',
     errNotImage: 'ليس نوع صورة مدعومًا',
-    errGskNotLoggedIn:
-      'لم تسجّل الدخول إلى Genspark: انقر على «تسجيل الدخول إلى Genspark» أدناه ثم أعد المحاولة',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'لم يتم تكوين مفتاح API لـ {provider}',
     errNoModel: 'لم يتم تكوين اسم النموذج',
     menuFile: 'ملف',
@@ -1158,8 +1152,8 @@ const tMain = createI18n({
     errImageNoText:
       'Anexos de imagem não fornecem texto; a imagem é enviada junto com a mensagem do usuário, basta vê-la diretamente',
     errNotImage: 'não é um tipo de imagem suportado',
-    errGskNotLoggedIn:
-      'Não conectado ao Genspark: clique em “Entrar no Genspark” abaixo, entre e tente novamente',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Nenhuma chave de API configurada para {provider}',
     errNoModel: 'Nenhum nome de modelo configurado',
     menuFile: 'Arquivo',
@@ -1253,8 +1247,8 @@ const tMain = createI18n({
     errImageNoText:
       "Gli allegati immagine non forniscono testo; l'immagine viene inviata insieme al messaggio dell'utente, basta guardarla direttamente",
     errNotImage: 'tipo di immagine non supportato',
-    errGskNotLoggedIn:
-      'Accesso a Genspark non effettuato: fai clic su “Accedi a Genspark” qui sotto, accedi e riprova',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Nessuna chiave API configurata per {provider}',
     errNoModel: 'Nessun nome di modello configurato',
     menuFile: 'File',
@@ -1348,8 +1342,8 @@ const tMain = createI18n({
     errImageNoText:
       'Załączniki graficzne nie zawierają tekstu; obraz jest wysyłany razem z wiadomością użytkownika, wystarczy na niego spojrzeć',
     errNotImage: 'nieobsługiwany typ obrazu',
-    errGskNotLoggedIn:
-      'Nie zalogowano do Genspark: kliknij „Zaloguj się do Genspark” poniżej, zaloguj się i spróbuj ponownie',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Nie skonfigurowano klucza API dla {provider}',
     errNoModel: 'Nie skonfigurowano nazwy modelu',
     menuFile: 'Plik',
@@ -1443,8 +1437,8 @@ const tMain = createI18n({
     errImageNoText:
       'Afbeeldingsbijlagen bevatten geen tekst; de afbeelding wordt samen met het gebruikersbericht verzonden en kan direct worden bekeken',
     errNotImage: 'geen ondersteund afbeeldingstype',
-    errGskNotLoggedIn:
-      'Niet aangemeld bij Genspark: klik hieronder op “Aanmelden bij Genspark”, meld u aan en probeer het opnieuw',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Geen API-sleutel geconfigureerd voor {provider}',
     errNoModel: 'Geen modelnaam geconfigureerd',
     menuFile: 'Bestand',
@@ -1538,8 +1532,8 @@ const tMain = createI18n({
     errImageNoText:
       'Lampiran imej tidak menyediakan teks; imej dihantar bersama mesej pengguna dan boleh dilihat terus',
     errNotImage: 'bukan jenis imej yang disokong',
-    errGskNotLoggedIn:
-      'Belum log masuk ke Genspark: klik “Log masuk ke Genspark” di bawah, kemudian cuba lagi',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'Kunci API untuk {provider} belum dikonfigurasikan',
     errNoModel: 'Nama model belum dikonfigurasikan',
     menuFile: 'Fail',
@@ -1632,7 +1626,8 @@ const tMain = createI18n({
     errImageNoText:
       'קבצים מצורפים מסוג תמונה אינם מספקים טקסט; התמונה נשלחת יחד עם הודעת המשתמש וניתן לצפות בה ישירות',
     errNotImage: 'סוג תמונה שאינו נתמך',
-    errGskNotLoggedIn: 'לא מחובר ל-Genspark: לחץ על "התחבר ל-Genspark" למטה, התחבר ונסה שוב',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: 'לא הוגדר מפתח API עבור {provider}',
     errNoModel: 'לא הוגדר שם מודל',
     menuFile: 'קובץ',
@@ -1726,8 +1721,8 @@ const tMain = createI18n({
     errImageNoText:
       'छवि अनुलग्नक टेक्स्ट प्रदान नहीं करते; छवि उपयोगकर्ता संदेश के साथ भेजी जाती है, उसे सीधे देखें',
     errNotImage: 'समर्थित छवि प्रकार नहीं है',
-    errGskNotLoggedIn:
-      'Genspark में साइन इन नहीं है: नीचे “Genspark में साइन इन करें” पर क्लिक करें, साइन इन करें और फिर से कोशिश करें',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: '{provider} के लिए कोई API कुंजी कॉन्फ़िगर नहीं है',
     errNoModel: 'कोई मॉडल नाम कॉन्फ़िगर नहीं है',
     menuFile: 'फ़ाइल',
@@ -1819,7 +1814,8 @@ const tMain = createI18n({
     errParseFailed: '檔案解析失敗',
     errImageNoText: '圖片附件不提供文字,已作為影像隨使用者訊息傳送,直接看圖即可',
     errNotImage: '不是支援的圖片類型',
-    errGskNotLoggedIn: '未登入 Genspark:請點擊下方「登入 Genspark」完成登入後重試',
+    errNoDeepSeekKey:
+      'No DeepSeek API key configured - set the DEEPSEEK_API_KEY environment variable or add a key in ai-settings.json, then retry',
     errNoApiKey: '未設定 {provider} 的 API Key',
     errNoModel: '未設定模型名稱',
     menuFile: '檔案',
@@ -2487,24 +2483,13 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:get-settings', (): AiSettings => {
     const stored = readJson<Partial<AiSettings> & LegacyAiSettings>(SETTINGS_PATH(), {})
     const settings = resolveAiSettings(stored, defaultAiSettings())
-    // AI features all go through Genspark (gsk login); legacy settings with another provider are reset
-    settings.provider = 'genspark'
+    // the DeepSeek key may come from the environment instead of the settings
+    // file; it is injected in-memory only and never persisted
+    const deepseek = settings.providers.deepseek
+    if (!deepseek.apiKey && process.env.DEEPSEEK_API_KEY) {
+      deepseek.apiKey = process.env.DEEPSEEK_API_KEY
+    }
     return settings
-  })
-
-  // Genspark account (gsk login state): auth source for AI features; the frontend uses it to prompt login when logged out
-  ipcMain.handle(
-    'ai:gsk-status',
-    async (_event, withEmail?: boolean): Promise<GenSparkAccountStatus> => {
-      if (!hasGskAuth()) return { loggedIn: false }
-      if (!withEmail) return { loggedIn: true }
-      const info = await gskLoginInfo()
-      return info?.email ? { loggedIn: true, email: info.email } : { loggedIn: true }
-    },
-  )
-
-  ipcMain.handle('ai:gsk-login', () => {
-    ensureGenofficeLogin((url) => void shell.openExternal(url))
   })
 
   ipcMain.handle('ai:set-settings', (_event, settings: AiSettings) => {
@@ -2517,9 +2502,10 @@ export function registerAiIpc(): void {
     const maxTokens = request.maxTokens ?? 8192
     const provider = settings.provider
     let config = settings.providers?.[provider]
-    // the genspark key never enters the settings file; requests take it from the gsk login state
-    if (provider === 'genspark' && config && !config.apiKey) {
-      config = { ...config, apiKey: gskApiKey() }
+    // the DeepSeek key may come from the environment; injected in-memory only,
+    // never written to the settings file (covers stale renderer settings snapshots)
+    if (provider === 'deepseek' && config && !config.apiKey && process.env.DEEPSEEK_API_KEY) {
+      config = { ...config, apiKey: process.env.DEEPSEEK_API_KEY }
     }
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
@@ -2528,7 +2514,7 @@ export function registerAiIpc(): void {
       send({
         requestId,
         type: 'error',
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
+        error: provider === 'deepseek' ? tm('errNoDeepSeekKey') : tm('errNoApiKey', { provider }),
       })
       return
     }
@@ -2627,13 +2613,13 @@ export function registerAiIpc(): void {
     const { settings, system, user } = request
     const provider = settings.provider
     let config = settings.providers?.[provider]
-    if (provider === 'genspark' && config && !config.apiKey) {
-      config = { ...config, apiKey: gskApiKey() }
+    if (provider === 'deepseek' && config && !config.apiKey && process.env.DEEPSEEK_API_KEY) {
+      config = { ...config, apiKey: process.env.DEEPSEEK_API_KEY }
     }
     if (!config?.apiKey) {
       return {
         ok: false,
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
+        error: provider === 'deepseek' ? tm('errNoDeepSeekKey') : tm('errNoApiKey', { provider }),
       }
     }
     if (!config.model) return { ok: false, error: tm('errNoModel') }

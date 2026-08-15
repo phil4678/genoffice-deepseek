@@ -232,8 +232,6 @@ interface ChatEntry {
   streaming?: boolean
   /** the run failed and this user message was rolled back out of the model context */
   undelivered?: boolean
-  /** the run failed because Genspark is signed out — render an inline sign-in button */
-  loginRequired?: boolean
   tools?: ToolActivity[]
   /** Generation progress card (only one per turn, replaced in real time) */
   deckProgress?: DeckProgressSnapshot
@@ -1262,22 +1260,6 @@ export function AiPanel({
             }
             return next
           })
-          // Signed-out failures get an inline sign-in button; detected via
-          // gsk status rather than matching the localized error text
-          void window.slidesApi
-            .aiGskStatus()
-            .then((status) => {
-              if (status.loggedIn) return
-              setChat((prev) => {
-                const next = [...prev]
-                const last = next.at(-1)
-                if (last?.role === 'assistant' && last.error) {
-                  next[next.length - 1] = { ...last, loginRequired: true }
-                }
-                return next
-              })
-            })
-            .catch(() => {})
           void finishHistoryBatch().finally(() => setBusy(false))
         },
       },
@@ -1689,7 +1671,7 @@ export function AiPanel({
         onPointerDown={startResize}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Genspark AI"
+        aria-label="DeepSeek AI"
       />
       <div className="ai-panel-header">
         <span className="ai-panel-title">
@@ -1808,11 +1790,6 @@ export function AiPanel({
               {entry.tools && entry.tools.length > 0 && <ToolChipList tools={entry.tools} />}
               {entry.error && (
                 <div className="ai-msg-error">{t('aiMsgError', { error: entry.error })}</div>
-              )}
-              {entry.loginRequired && (
-                <button className="ai-login-btn" onClick={() => void window.slidesApi.aiGskLogin()}>
-                  {t('aiGskLoginBtn')}
-                </button>
               )}
               {entry.deckProgress && <DeckProgressCard progress={entry.deckProgress} />}
               {showToolbar && (

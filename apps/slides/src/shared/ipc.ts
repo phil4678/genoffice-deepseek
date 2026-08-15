@@ -9,12 +9,7 @@
  */
 import type { RenderSlide } from '@genoffice/pptx-render'
 import type { SlideComment, SectionInfo } from '@genoffice/pptx-engine'
-import type {
-  AiSettings,
-  AiStreamChunk,
-  AiStreamRequest,
-  GenSparkAccountStatus,
-} from '@genoffice/ai-provider'
+import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 
 export type { SlideComment, SectionInfo } from '@genoffice/pptx-engine'
 
@@ -26,7 +21,6 @@ export type {
   AiSettings,
   AiStreamChunk,
   AiStreamRequest,
-  GenSparkAccountStatus,
 } from '@genoffice/ai-provider'
 export { AI_PROVIDERS } from '@genoffice/ai-provider'
 export type { AgentToolCall, AgentToolDef } from '@genoffice/agent-core'
@@ -1330,10 +1324,6 @@ export interface SlidesApi {
   setAiSettings: (settings: AiSettings) => Promise<void>
   aiStream: (request: AiStreamRequest) => Promise<void>
   aiStreamCancel: (requestId: string) => Promise<void>
-  /** Genspark account status (gsk login state); with withEmail also fetches the email (needs a network request, slower) */
-  aiGskStatus: (withEmail?: boolean) => Promise<GenSparkAccountStatus>
-  /** Open the browser to log into Genspark (fire-and-forget; aiGskStatus turns logged-in once done) */
-  aiGskLogin: () => Promise<void>
   webSearch: (
     query: string,
     maxResults?: number,
@@ -1385,8 +1375,6 @@ export interface SlidesApi {
     mediaUrls: string[]
     requirements: string
   }) => Promise<{ text?: string; error?: string }>
-  /** gsk availability: installed and logged in (for UI/tools to prompt login) */
-  gskStatus: () => Promise<{ available: boolean; email?: string }>
   onAiStream: (handler: (chunk: AiStreamChunk) => void) => () => void
   /** Style Skill sidecar: write styleSkill to a same-named .styleskill.json next to the draft */
   saveStyleSidecar: (data: {
