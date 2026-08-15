@@ -1,3 +1,8 @@
+> **This is a fork.** This repository replaces the Genspark AI backend with the
+> DeepSeek API and carries Windows dev-tooling fixes. See [FORK.md](FORK.md)
+> for what changed, how to run it, and how to sync with upstream. All fork
+> work lives on the `deepseek-provider` branch; `main` mirrors upstream.
+
 # [GenOffice](https://genoffice.ai/)
 
 **The world's first full-featured open-source AI Office suite.**
@@ -93,13 +98,14 @@ tokens (`packages/ui`), with a CI guard that keeps chrome colors on the token
 system. Document surfaces stay light in dark mode — Word-style dark chrome
 around white paper — so files render and export identically in both themes.
 
-**AI backend (Genspark).** The apps sign in to a Genspark account through a
-device-code flow; no model API key is entered or stored by the user. Model
-calls route through the Genspark proxy (Claude, GPT, and Gemini families).
-The same account also unlocks the Genspark ("gsk") tool endpoints the agents
-build on — web and image search, image generation and editing,
-image/audio/video analysis, and audio transcription — all reachable through
-`packages/ai-search` for anyone extending the agent layer.
+**AI backend.** Model calls go to the DeepSeek API (`https://api.deepseek.com`,
+OpenAI-compatible, `deepseek-v4-flash` / `deepseek-v4-pro`), authenticated with a
+`DEEPSEEK_API_KEY` environment variable or a key in the app's `ai-settings.json` —
+no key is entered or stored through the UI. The Genspark ("gsk") tool endpoints the
+agents build on — web and image search, image generation and editing,
+image/audio/video analysis, and audio transcription — remain available through a
+Genspark account sign-in and `packages/ai-search` for anyone extending the agent
+layer.
 
 ## Engine packages
 
