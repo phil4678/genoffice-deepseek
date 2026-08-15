@@ -104,6 +104,40 @@ The sheets app additionally needs a Rust toolchain for its xlsx sidecar
 (`cargo` on PATH); `npm run build -w @genoffice/sheets` compiles it
 automatically.
 
+## Building installers
+
+Run from the repository root on the OS you're targeting; each command
+regenerates the third-party notices, builds all six apps, and packages the
+result into `apps/shell/release/`:
+
+| Platform                 | Command              | Output                                                               |
+| ------------------------ | -------------------- | -------------------------------------------------------------------- |
+| macOS (run on macOS)     | `npm run dist:mac`   | `.dmg` + `.zip` (arm64; arm64+x64 when `GENOFFICE_MAC_X64=1` is set) |
+| Windows (run on Windows) | `npm run dist:win`   | NSIS `.exe` installer                                                |
+| Linux (run on Linux)     | `npm run dist:linux` | `.AppImage` + `.deb` + `.rpm`                                        |
+
+Prerequisites: Node >= 22.12, npm >= 10, and a Rust toolchain (`cargo` on
+PATH) for the sheets xlsx sidecar.
+
+- **Unsigned by default.** Without Apple or Windows signing credentials in
+  the environment, the macOS and Windows installers are unsigned — code
+  signing is skipped with a warning rather than failing. That is the expected
+  result for a local build.
+- **Windows sidecar staging.** `dist:win` expects the xlsx sidecar at the
+  MinGW cross-compilation path. Building on Windows leaves it under the MSVC
+  target instead, so stage it first from `apps/sheets/native/xlsx-engine`:
+
+  ```bash
+  cargo build --release --target x86_64-pc-windows-gnu
+  ```
+
+  or copy an existing `target/release/xlsx-sidecar.exe` to
+  `target/x86_64-pc-windows-gnu/release/`.
+
+- **Auto-update is off.** With `GENOFFICE_UPDATE_URL` unset, the packaged app
+  ships without an update feed and in-app auto-update stays disabled (see
+  `apps/shell/electron-builder.cjs`).
+
 Local UI/e2e driver scripts (Playwright + Electron, for local acceptance, not
 committed by default) live in [`scripts/drivers/`](scripts/drivers/README.md).
 
