@@ -79,6 +79,22 @@ image/audio/video analysis, and audio transcription — remain available through
 Genspark account sign-in and `packages/ai-search` for anyone extending the agent
 layer.
 
+**Slides generation model override.** The deck-generation steps (style planning,
+page-by-page design) can run on a different OpenAI-compatible endpoint than the
+rest of the suite — e.g. a stronger model on
+[OpenRouter](https://openrouter.ai) or a local [Ollama](https://ollama.com)
+server — while chat and the other apps keep their configured provider:
+
+```bash
+# Windows: set SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1 ... etc.
+export SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1   # or http://localhost:11434/v1 for Ollama
+export SLIDES_AI_MODEL=anthropic/claude-sonnet-4.5       # or your chosen model id
+export SLIDES_AI_KEY=sk-or-...                           # the endpoint's API key (omit to reuse the custom provider key)
+```
+
+Unset variables disable the override; failed generation requests fall back to the
+user's configured model automatically.
+
 ## Engine packages
 
 All pure TypeScript, no Electron dependency, unit-tested (except the UI kit):

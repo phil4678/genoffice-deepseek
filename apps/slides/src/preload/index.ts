@@ -113,6 +113,7 @@ const api: SlidesApi = {
     deckName?: string,
   ) => ipcRenderer.invoke('slides:html-to-pptx', pagesHtml, fitWidthPx, mode, atIndex, deckName),
   cloudGenStatus: () => ipcRenderer.invoke('slides:cloud-gen-status'),
+  aiOverride: () => ipcRenderer.invoke('slides:ai-override'),
   cloudGeneratePage: (op: {
     brief: string
     title?: string

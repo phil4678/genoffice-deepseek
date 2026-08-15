@@ -1048,6 +1048,8 @@ export interface SlidesApi {
   >
   /** Whether cloud single-page generation (gsk slide_generate) is available (GENOFFICE_CLOUD_SLIDE=1 + gsk login) */
   cloudGenStatus: () => Promise<{ enabled: boolean }>
+  /** Slides-generation model override from SLIDES_AI_BASE_URL/SLIDES_AI_MODEL/SLIDES_AI_KEY (null when unset) */
+  aiOverride: () => Promise<{ baseUrl: string; model: string; apiKey?: string } | null>
   /** Cloud single-page generation: brief → one-slide pptx temp file; the marker goes into an htmlToPptx pagesHtml slot in place of HTML */
   cloudGeneratePage: (op: {
     brief: string

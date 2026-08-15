@@ -473,6 +473,19 @@ export function AiPanel({
   onDeckProgressRef.current = onDeckProgress
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  /** SLIDES_AI_* override for the deck-generation steps (fetched once; env vars don't change at runtime) */
+  const genOverrideRef = useRef<{ baseUrl: string; model: string; apiKey?: string } | null>(null)
+  useEffect(() => {
+    // optional-call: test harnesses mock a slidesApi without this newer bridge method
+    const bridge = window.slidesApi as { aiOverride?: () => Promise<unknown> } | undefined
+    if (!bridge?.aiOverride) return
+    void bridge
+      .aiOverride()
+      .then((ov) => {
+        genOverrideRef.current = ov as { baseUrl: string; model: string; apiKey?: string } | null
+      })
+      .catch(() => {})
+  }, [])
   const imagesRef = useRef(images)
   imagesRef.current = images
   const attachmentsRef = useRef(attachments)
@@ -683,12 +696,31 @@ export function AiPanel({
 
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
-    // The three slides generation steps (style/planning/per-page HTML) force the high-quality model (only with the anthropic provider;
-    // other providers keep the user setting, avoiding passing nonexistent model names). Chat/fine-tuning still uses the user's configured model.
+    // The three slides generation steps (style/planning/per-page HTML) can run on a
+    // dedicated model: an explicit SLIDES_AI_* override wins, then the anthropic
+    // high-quality model (only with the anthropic provider; other providers keep the
+    // user setting, avoiding passing nonexistent model names). Chat/fine-tuning still
+    // uses the user's configured model.
     const SLIDES_GEN_MODEL = 'claude-opus-4-7'
     // Return on demand a settings copy with the generation model overridden (deep copy, doesn't pollute settingsRef).
     const settingsForGen = (): AiSettings => {
       const cur = settingsRef.current
+      const ov = genOverrideRef.current
+      if (ov) {
+        // route the generation steps through the configured OpenAI-compatible endpoint
+        return {
+          ...cur,
+          provider: 'custom',
+          providers: {
+            ...cur.providers,
+            custom: {
+              apiKey: ov.apiKey ?? cur.providers.custom.apiKey,
+              model: ov.model,
+              baseUrl: ov.baseUrl,
+            },
+          },
+        }
+      }
       if (cur.provider !== 'anthropic') return cur
       const ap = cur.providers.anthropic
       return {
@@ -814,8 +846,12 @@ export function AiPanel({
       // Only "request errors" fall back to the user's model for a retry; timeouts/empty output don't switch models (mostly network/output problems, switching won't help)
       if (first.errKind) return first
       const cur = settingsRef.current
-      if (cur.provider !== 'anthropic') return first // The gen-model override only applies with anthropic
-      if (cur.providers.anthropic?.model === SLIDES_GEN_MODEL) return first
+      if (!genOverrideRef.current) {
+        // Without a SLIDES_AI_* override, the gen-model override only applies with anthropic;
+        // otherwise settingsForGen() already used the user's settings and a retry repeats them
+        if (cur.provider !== 'anthropic') return first
+        if (cur.providers.anthropic?.model === SLIDES_GEN_MODEL) return first
+      }
       return runLlmAttempt(cur, system, user, timeoutMs, signal, maxTokens)
     }
 

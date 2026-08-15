@@ -166,6 +166,24 @@ export function registerAiIpc(): void {
 // never called; docs does not have these channels, so putting them in the wrong place raises
 // "No handler registered".
 export function registerSlidesOnlyAiIpc(): void {
+  // Optional slides-generation model override: SLIDES_AI_BASE_URL + SLIDES_AI_MODEL route
+  // the deck-generation LLM steps through a different OpenAI-compatible endpoint (e.g.
+  // OpenRouter or a local Ollama server) while the rest of the suite keeps its provider.
+  // SLIDES_AI_KEY supplies that endpoint's API key; unset = reuse the custom provider's key.
+  ipcMain.handle(
+    'slides:ai-override',
+    (): { baseUrl: string; model: string; apiKey?: string } | null => {
+      const baseUrl = process.env.SLIDES_AI_BASE_URL
+      const model = process.env.SLIDES_AI_MODEL
+      if (!baseUrl || !model) return null
+      return {
+        baseUrl,
+        model,
+        ...(process.env.SLIDES_AI_KEY ? { apiKey: process.env.SLIDES_AI_KEY } : {}),
+      }
+    },
+  )
+
   // gsk (Genspark CLI) capabilities: AI image generation / media analysis. Returns an error prompt when not logged in.
   ipcMain.handle(
     'ai:generate-image',

@@ -27,6 +27,11 @@ upstream — see [Syncing with upstream](#syncing-with-upstream).
   `deepseek-reasoner`) remap to `deepseek-v4-pro`.
 - DeepSeek V4 is text-only, so images attached to an AI request are dropped
   (OpenAI/custom providers still receive them).
+- Slides deck generation can run on its own OpenAI-compatible endpoint via
+  `SLIDES_AI_BASE_URL` / `SLIDES_AI_MODEL` / `SLIDES_AI_KEY` (e.g. OpenRouter
+  or local Ollama), independent of the suite-wide provider. The slides skill
+  prompt also carries a built-in design system (palettes, typography, layout
+  library) tuned for local generation.
 
 ### Developer experience (Windows)
 
