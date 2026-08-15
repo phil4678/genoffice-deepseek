@@ -38,45 +38,6 @@ npm run dev                       # all editors + shell, or: npm run dev:docs
 - **macOS, Windows, Linux.**
 - **Free & open-source (Apache-2.0).**
 
-## Download
-
-| Platform                             | Requirements                                          | Download                                                                                                                         |
-| ------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **macOS** — Apple Silicon (arm64)    | macOS 11+                                             | [GenOffice-0.6.389-arm64.dmg](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/GenOffice-0.6.389-arm64.dmg)   |
-| **macOS** — Intel (x64)              | macOS 11+                                             | [GenOffice-0.6.389.dmg](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/GenOffice-0.6.389.dmg)               |
-| **Windows** (x64)                    | Windows 10+                                           | [GenOfficeSetup-v0.6.389.exe](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/GenOfficeSetup-v0.6.389.exe)   |
-| **Linux** — Debian / Ubuntu          | x86_64, glibc 2.34+ (Ubuntu 22.04 or newer)           | [genoffice_0.6.389_amd64.deb](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/genoffice_0.6.389_amd64.deb)   |
-| **Linux** — Fedora / RHEL / openSUSE | x86_64, glibc 2.34+ (Fedora 35+, RHEL 9+, Leap 15.6+) | [genoffice-0.6.389.x86_64.rpm](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/genoffice-0.6.389.x86_64.rpm) |
-| **Linux** — other distributions      | x86_64, glibc 2.34+, FUSE 2                           | [GenOffice-0.6.389.AppImage](https://github.com/genspark-ai/genoffice/releases/download/v0.6.389/GenOffice-0.6.389.AppImage)     |
-
-All builds come from `main`; the macOS and Windows installers are signed.
-Older versions are on the [Releases](https://github.com/genspark-ai/genoffice/releases) page.
-
-### Installing on Linux
-
-The deb installs with apt — it pulls in the dependencies and adds GenOffice
-to the applications menu:
-
-```bash
-sudo apt install ./genoffice_0.6.389_amd64.deb
-```
-
-On Fedora / RHEL-family / openSUSE, install the rpm instead:
-
-```bash
-sudo dnf install ./genoffice-0.6.389.x86_64.rpm     # Fedora / RHEL family
-sudo zypper install ./genoffice-0.6.389.x86_64.rpm  # openSUSE
-```
-
-The AppImage instead runs in place: install the FUSE 2 runtime
-(`sudo apt install libfuse2`; on Ubuntu 24.04 the package is `libfuse2t64`),
-make the file executable, then run it:
-
-```bash
-chmod +x GenOffice-0.6.389.AppImage
-./GenOffice-0.6.389.AppImage
-```
-
 ## Apps
 
 | App             | Product                | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
