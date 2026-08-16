@@ -23,8 +23,9 @@ npm run dev                       # all editors + shell, or: npm run dev:docs
 
 ## Environment variables
 
-> **Read this before the first run** — these are easy to overlook and the AI
-> features silently fall back without them.
+> **Read this before the first run** — these four variables configure the AI
+> features. The setup differs depending on how you run DeepOffice, so both
+> paths are spelled out below.
 
 | Variable             | What it does                                                                                                                                               |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -33,33 +34,68 @@ npm run dev                       # all editors + shell, or: npm run dev:docs
 | `SLIDES_AI_MODEL`    | Model id at that endpoint, vendor-prefixed for OpenRouter (e.g. `openai/gpt-5.6-luna`, `anthropic/claude-sonnet-5`, `moonshotai/kimi-k3`, `qwen/...`)      |
 | `SLIDES_AI_KEY`      | API key for that endpoint (omit to reuse the custom provider's key)                                                                                        |
 
+Only `DEEPSEEK_API_KEY` is required; the three `SLIDES_AI_*` variables are
+optional (unset, slides generation falls back to DeepSeek, and a failing
+generation request falls back automatically). Start with the one variable and
+add the trio later if you want a stronger deck-generation model.
+
+### Setup via binary (the installed app)
+
+The installed app does **not** inherit a terminal's environment — set the
+variables as **system/user environment variables** so every launch sees them:
+
+1. Start → type **"Edit environment variables for your account"** → open it
+2. **New** — one row per variable, e.g.:
+
+   | Name                 | Value                          |
+   | -------------------- | ------------------------------ |
+   | `DEEPSEEK_API_KEY`   | `sk-...`                       |
+   | `SLIDES_AI_BASE_URL` | `https://openrouter.ai/api/v1` |
+   | `SLIDES_AI_MODEL`    | `openai/gpt-5.6-luna`          |
+   | `SLIDES_AI_KEY`      | `sk-or-...`                    |
+
+3. **OK**, then relaunch DeepOffice (variables only reach newly started apps).
+
+Alternative for the DeepSeek key only: write `%APPDATA%\DeepOffice\ai-settings.json`:
+
+```json
+{
+  "provider": "deepseek",
+  "providers": { "deepseek": { "apiKey": "sk-...", "model": "deepseek-v4-pro" } }
+}
+```
+
+### Setup via code (`npm run dev`)
+
+The dev app inherits the environment of the terminal that starts it — either
+set the variables in that terminal directly, or set them once as system/user
+environment variables (above) and start dev from a **newly opened** terminal.
+
 ```bash
-# Windows: set DEEPSEEK_API_KEY=sk-... etc.
+# Windows cmd / PowerShell (set once in the same terminal, then start dev)
+set DEEPSEEK_API_KEY=sk-...
+set SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1
+set SLIDES_AI_MODEL=openai/gpt-5.6-luna
+set SLIDES_AI_KEY=sk-or-...
+npm run dev
+```
+
+```bash
+# macOS / Linux
 export DEEPSEEK_API_KEY=sk-...
 export SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1
 export SLIDES_AI_MODEL=openai/gpt-5.6-luna
 export SLIDES_AI_KEY=sk-or-...
+npm run dev
 ```
 
-- The `SLIDES_AI_*` trio is **optional**: unset, slides generation falls back to
-  `DEEPSEEK_API_KEY`; a failing generation request also falls back automatically.
-- The **installed app** doesn't inherit a terminal's environment — set the
-  variables as system/user environment variables (Start → "Edit environment
-  variables for your account"), or put the DeepSeek key in
-  `%APPDATA%\DeepOffice\ai-settings.json`:
-  ```json
-  {
-    "provider": "deepseek",
-    "providers": { "deepseek": { "apiKey": "sk-...", "model": "deepseek-v4-pro" } }
-  }
-  ```
-- **Terminal gotcha:** `npm run dev` must be started from a terminal where the
-  variables are visible (`env | grep -i slide` prints all three) — terminals
-  opened _before_ the variables were set never see them, and neither does a
-  running app. On startup the dev terminal prints
+- **Terminal gotcha:** terminals opened _before_ the variables were set never
+  see them, and neither does a running app. Verify with `env | grep -i slide`
+  (Windows: `set | findstr SLIDES`) before starting dev.
+- On startup the dev terminal prints
   `[slides-ai] local deck generation active (override: <model> @ <base>)` —
-  that line proves the main process sees the override. AI failures append to
-  `%TEMP%\genoffice-ai-errors.log` for debugging.
+  that line proves the main process sees the override.
+- AI failures append to `%TEMP%\genoffice-ai-errors.log` for debugging.
 
 ---
 
