@@ -97,6 +97,31 @@ npm run dev
   that line proves the main process sees the override.
 - AI failures append to `%TEMP%\genoffice-ai-errors.log` for debugging.
 
+## Pre-compiled binaries
+
+| Platform               | Artifact                                          | Status                                                                                    |
+| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Windows** (x64, 10+) | `DeepOffice Setup <version>.exe` (NSIS installer) | Available on the [Releases](https://github.com/phil4678/genoffice-deepseek/releases) page |
+| macOS / Linux          | —                                                 | Build from source for now — see [Building installers](#building-installers)               |
+
+**Windows:**
+
+1. Download the latest `DeepOffice Setup <version>.exe` from
+   [Releases](https://github.com/phil4678/genoffice-deepseek/releases)
+2. Run it — the installer is **unsigned**, so SmartScreen will warn:
+   **More info → Run anyway**
+3. Before (or right after) the first launch, set the environment variables from
+   [Environment variables](#environment-variables) — the installed app only
+   reads them from the system/user environment
+
+Notes:
+
+- First launch creates a fresh profile in `%APPDATA%\DeepOffice`; older
+  `GenOffice` profiles are not migrated.
+- The packaged app ships everything it needs (editors, fonts, the Rust xlsx
+  sidecar) — no runtime dependencies.
+- In-app auto-update is disabled (no update feed configured).
+
 ---
 
 ## Features
