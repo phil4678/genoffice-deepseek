@@ -298,12 +298,6 @@ function currentTheme(): UiTheme {
   return cachedTheme
 }
 
-// ---- first-run onboarding ----
-// The GenTeam community page opened from the onboarding's second slide.
-// Stable short link served by the genoffice.ai site; it 302s to the tokened
-// invite link, which stays out of this repo and rotates server-side.
-const GENTEAM_URL = 'https://genoffice.ai/join'
-
 // Genspark credit-usage page opened from the account menu's credits row.
 // Kept main-side so the renderer never supplies the URL.
 const CREDIT_USAGE_URL = 'https://www.genspark.ai/credit-usage'
@@ -2127,12 +2121,6 @@ function registerHomeIpc(): void {
     }
     writeAppSetting(APP_SETTINGS_PATH(), DEFAULT_SAVE_DIR_KEY, picked)
     return picked
-  })
-
-  ipcMain.handle(HOME_CHANNELS.openGenTeam, () => {
-    shell.openExternal(GENTEAM_URL).catch(() => {
-      // no browser handler available; nothing actionable for the user here
-    })
   })
 
   ipcMain.handle(HOME_CHANNELS.openCreditUsage, () => {

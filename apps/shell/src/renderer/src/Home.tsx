@@ -1012,18 +1012,14 @@ export function Home() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [renaming, setRenaming] = useState<{ path: string; value: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null)
-  // name in the greeting; omitted when logged out
-  const [accountName, setAccountName] = useState('')
   // Genspark Projects is web-account data, so its nav entry only shows when logged in
   const [loggedIn, setLoggedIn] = useState(false)
   // single source of account state: AccountEntry reports every change (initial
-  // load, login, logout), keeping the greeting name and the nav entry in sync
+  // load, login, logout), keeping the nav entry in sync
   const handleAccountStatus = useCallback((s: AccountStatus | null) => {
     const on = s?.loggedIn ?? false
     setLoggedIn(on)
     if (!on) setCloudMode(false)
-    const name = on ? (s?.email ?? '').split('@')[0] : ''
-    setAccountName(name ? name[0].toUpperCase() + name.slice(1) : '')
   }, [])
   const [greetAskKey] = useState(
     () => GREET_ASK_KEYS[Math.floor(Math.random() * GREET_ASK_KEYS.length)]!,
@@ -1824,7 +1820,7 @@ export function Home() {
             ? 'greetAfternoon'
             : 'greetEvening'
     const cjk = lang === 'zh' || lang === 'zh-TW' || lang === 'ja'
-    const greeting = `${t(greetKey)}${accountName ? (cjk ? '，' : ', ') + accountName : ''}${cjk ? '。' : '. '}`
+    const greeting = `${t(greetKey)}${cjk ? '。' : '. '}`
     return (
       <main className="content">
         <section className="quick-start" aria-label={t('secQuickStart')}>
