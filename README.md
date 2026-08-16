@@ -79,21 +79,36 @@ image/audio/video analysis, and audio transcription — remain available through
 Genspark account sign-in and `packages/ai-search` for anyone extending the agent
 layer.
 
-**Slides generation model override.** The deck-generation steps (style planning,
-page-by-page design) can run on a different OpenAI-compatible endpoint than the
-rest of the suite — e.g. a stronger model on
-[OpenRouter](https://openrouter.ai) or a local [Ollama](https://ollama.com)
-server — while chat and the other apps keep their configured provider:
+**Slides deck generation.** Deck generation (`generate_deck`, `regenerate_slide`)
+is **fully local — no Genspark account needed**. The generation model writes each
+page's HTML and a local converter (`apps/slides/src/main/html-page.ts`) turns it
+into real editable pptx elements (textboxes, cards, backgrounds, downloaded
+images — failed image fetches degrade to a gray placeholder). The Genspark cloud
+path remains as an upstream-parity fallback when a gsk login exists.
+
+The deck-generation steps (style planning, page-by-page design) can run on a
+different OpenAI-compatible endpoint than the rest of the suite — e.g. a
+stronger model on [OpenRouter](https://openrouter.ai) or a local
+[Ollama](https://ollama.com) server — while chat and the other apps keep their
+configured provider. Three environment variables control it:
 
 ```bash
 # Windows: set SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1 ... etc.
 export SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1   # or http://localhost:11434/v1 for Ollama
-export SLIDES_AI_MODEL=anthropic/claude-sonnet-4.5       # or your chosen model id
+export SLIDES_AI_MODEL=openai/gpt-5.6-luna               # e.g. anthropic/claude-sonnet-5, moonshotai/kimi-k3
 export SLIDES_AI_KEY=sk-or-...                           # the endpoint's API key (omit to reuse the custom provider key)
 ```
 
 Unset variables disable the override; failed generation requests fall back to the
 user's configured model automatically.
+
+> **Gotcha:** `npm run dev` must be started from a terminal where the variables
+> are actually visible (`env | grep -i slide` prints all three) — terminals
+> opened _before_ the variables were set never see them, and neither does a
+> running app. On startup the dev terminal prints
+> `[slides-ai] local deck generation active (override: <model> @ <base>)` — that
+> line proves the main process sees the override. AI failures append to
+> `%TEMP%\genoffice-ai-errors.log` for debugging.
 
 ## Engine packages
 
