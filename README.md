@@ -99,15 +99,15 @@ npm run dev
 
 ## Pre-compiled binaries
 
-| Platform               | Artifact                                          | Status                                                                                    |
-| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Windows** (x64, 10+) | `DeepOffice Setup <version>.exe` (NSIS installer) | Available on the [Releases](https://github.com/phil4678/genoffice-deepseek/releases) page |
-| macOS / Linux          | —                                                 | Build from source for now — see [Building installers](#building-installers)               |
+| Platform               | Artifact                                      | Status                                                                                                                  |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Windows** (x64, 10+) | `DeepOffice.Setup.0.6.0.exe` (NSIS installer) | [Download](https://github.com/phil4678/genoffice-deepseek/releases/download/v0.6.0-deepseek/DeepOffice.Setup.0.6.0.exe) |
+| macOS / Linux          | —                                             | Build from source for now — see [Building installers](#building-installers)                                             |
 
 **Windows:**
 
-1. Download the latest `DeepOffice Setup <version>.exe` from
-   [Releases](https://github.com/phil4678/genoffice-deepseek/releases)
+1. [Download DeepOffice.Setup.0.6.0.exe](https://github.com/phil4678/genoffice-deepseek/releases/download/v0.6.0-deepseek/DeepOffice.Setup.0.6.0.exe)
+   (older versions on the [Releases](https://github.com/phil4678/genoffice-deepseek/releases) page)
 2. Run it — the installer is **unsigned**, so SmartScreen will warn:
    **More info → Run anyway**
 3. Before (or right after) the first launch, set the environment variables from
