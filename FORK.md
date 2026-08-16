@@ -1,4 +1,4 @@
-# GenOffice — DeepSeek fork
+# DeepOffice — DeepSeek fork
 
 This repository is a fork of
 [genspark-ai/genoffice](https://github.com/genspark-ai/genoffice) that
@@ -78,11 +78,11 @@ git push --force-with-lease fork deepseek-provider
 
 ## Branding
 
-"GenOffice" and "Genspark" are trademarks of Mainfunc, Inc. The Apache-2.0
-license does not grant permission to use them, and upstream asks forks to use
-their own branding (see the upstream README).
+"GenOffice" and "Genspark" are trademarks of Mainfunc, Inc., and upstream asks
+forks to use their own branding (see the upstream README). This fork brands
+itself **DeepOffice**; keep that name for any binaries you distribute.
 
 ## License
 
 Apache-2.0, same as upstream (see LICENSE). The `ee/` directory is covered by
-the GenOffice Enterprise License and must not be modified.
+the GenOffice Enterprise License (`ee/LICENSE`) and must not be modified.

@@ -1,4 +1,4 @@
-# GenOffice — DeepSeek fork
+# DeepOffice — DeepSeek fork
 
 > **This repository is a fork of [genspark-ai/genoffice](https://github.com/genspark-ai/genoffice).**
 > All fork changes live on the `deepseek-provider` branch — see
@@ -13,26 +13,53 @@ byte-preserving round trips, and builds AI editing into the workflow rather
 than bolting on a chat box.
 
 **AI backend: DeepSeek.** This fork replaces the Genspark LLM proxy with the
-DeepSeek API (`deepseek-v4-flash` / `deepseek-v4-pro`). Set your API key
-before starting:
+DeepSeek API (`deepseek-v4-flash` / `deepseek-v4-pro`). See
+[Environment variables](#environment-variables) below for the required setup.
 
 ```bash
 npm install
-export DEEPSEEK_API_KEY=sk-...    # Windows: set DEEPSEEK_API_KEY=sk-...
 npm run dev                       # all editors + shell, or: npm run dev:docs
 ```
 
-The installed app doesn't inherit a terminal's environment: to use AI
-features there, set `DEEPSEEK_API_KEY` as a system/user environment variable
-(Windows: Start → "Edit environment variables for your account"), or put the
-key in `%APPDATA%\GenOffice\ai-settings.json`:
+## Environment variables
 
-```json
-{
-  "provider": "deepseek",
-  "providers": { "deepseek": { "apiKey": "sk-...", "model": "deepseek-v4-pro" } }
-}
+> **Read this before the first run** — these are easy to overlook and the AI
+> features silently fall back without them.
+
+| Variable             | What it does                                                                                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEEPSEEK_API_KEY`   | DeepSeek API key for the suite-wide AI model provider (`deepseek-v4-flash` / `deepseek-v4-pro`)                                                            |
+| `SLIDES_AI_BASE_URL` | OpenAI-compatible endpoint for the **slides deck-generation model** (e.g. `https://openrouter.ai/api/v1`, or `http://localhost:11434/v1` for local Ollama) |
+| `SLIDES_AI_MODEL`    | Model id at that endpoint, vendor-prefixed for OpenRouter (e.g. `openai/gpt-5.6-luna`, `anthropic/claude-sonnet-5`, `moonshotai/kimi-k3`, `qwen/...`)      |
+| `SLIDES_AI_KEY`      | API key for that endpoint (omit to reuse the custom provider's key)                                                                                        |
+
+```bash
+# Windows: set DEEPSEEK_API_KEY=sk-... etc.
+export DEEPSEEK_API_KEY=sk-...
+export SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1
+export SLIDES_AI_MODEL=openai/gpt-5.6-luna
+export SLIDES_AI_KEY=sk-or-...
 ```
+
+- The `SLIDES_AI_*` trio is **optional**: unset, slides generation falls back to
+  `DEEPSEEK_API_KEY`; a failing generation request also falls back automatically.
+- The **installed app** doesn't inherit a terminal's environment — set the
+  variables as system/user environment variables (Start → "Edit environment
+  variables for your account"), or put the DeepSeek key in
+  `%APPDATA%\DeepOffice\ai-settings.json`:
+  ```json
+  {
+    "provider": "deepseek",
+    "providers": { "deepseek": { "apiKey": "sk-...", "model": "deepseek-v4-pro" } }
+  }
+  ```
+- **Terminal gotcha:** `npm run dev` must be started from a terminal where the
+  variables are visible (`env | grep -i slide` prints all three) — terminals
+  opened _before_ the variables were set never see them, and neither does a
+  running app. On startup the dev terminal prints
+  `[slides-ai] local deck generation active (override: <model> @ <base>)` —
+  that line proves the main process sees the override. AI failures append to
+  `%TEMP%\genoffice-ai-errors.log` for debugging.
 
 ---
 
@@ -52,14 +79,14 @@ key in `%APPDATA%\GenOffice\ai-settings.json`:
 
 ## Apps
 
-| App             | Product                | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/docs`     | **GenOffice Docs**     | `.docx` word processor. Byte-preserving round trip: only dirty paragraphs are regenerated (paragraph patch), everything else in the original file is kept byte-for-byte, so opening and saving never breaks layout in Word. Paginated view whose line metrics reproduce the original document's layout, tracked changes, comments, styles, equations, ink.                                                                                                                                                                                                      |
-| `apps/sheets`   | **GenOffice Sheets**   | `.xlsx` spreadsheet. UI built on the open-source [Univer](https://github.com/dream-num/univer) core (Apache-2.0) with a large layer of in-house extensions; `.xlsx` import/export runs through an in-house Rust sidecar (calamine + IronCalc), charts are rendered in-house (Konva), plus pivot tables, slicers, conditional formatting, and formula tracing.                                                                                                                                                                                                   |
-| `apps/slides`   | **GenOffice Slides**   | `.pptx` presentations. In-house `.pptx` parse/render/edit engine with masters, charts, cropping, ink, and text shaping (HarfBuzz metrics).                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `apps/pdf`      | **GenOffice PDF**      | `.pdf` viewer/editor on [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) + [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT): annotations, forms, outlines, stamps, signatures, page operations, and printing support. True text editing — paragraph selection with in-block reflow, alignment restoration, original-font preservation — and content-stream image insert/edit, all rewriting page content streams through [PDFium](https://pdfium.googlesource.com/pdfium/) wasm (BSD-3-Clause) with subset-embedded fonts — no cover-up annotations. |
-| `apps/markdown` | **GenOffice Markdown** | `.md` / `.markdown` editor: Tiptap block editor over plain Markdown files — headings, lists, tables, images, code blocks — saved back as plain Markdown, hosted in shell tabs.                                                                                                                                                                                                                                                                                                                                                                                  |
-| `apps/shell`    | **GenOffice**          | The suite shell: home screen, tabbed hosting of the five editors, light/dark/system theme, auto-update.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| App             | Product                 | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/docs`     | **DeepOffice Docs**     | `.docx` word processor. Byte-preserving round trip: only dirty paragraphs are regenerated (paragraph patch), everything else in the original file is kept byte-for-byte, so opening and saving never breaks layout in Word. Paginated view whose line metrics reproduce the original document's layout, tracked changes, comments, styles, equations, ink.                                                                                                                                                                                                      |
+| `apps/sheets`   | **DeepOffice Sheets**   | `.xlsx` spreadsheet. UI built on the open-source [Univer](https://github.com/dream-num/univer) core (Apache-2.0) with a large layer of in-house extensions; `.xlsx` import/export runs through an in-house Rust sidecar (calamine + IronCalc), charts are rendered in-house (Konva), plus pivot tables, slicers, conditional formatting, and formula tracing.                                                                                                                                                                                                   |
+| `apps/slides`   | **DeepOffice Slides**   | `.pptx` presentations. In-house `.pptx` parse/render/edit engine with masters, charts, cropping, ink, and text shaping (HarfBuzz metrics).                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `apps/pdf`      | **DeepOffice PDF**      | `.pdf` viewer/editor on [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) + [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT): annotations, forms, outlines, stamps, signatures, page operations, and printing support. True text editing — paragraph selection with in-block reflow, alignment restoration, original-font preservation — and content-stream image insert/edit, all rewriting page content streams through [PDFium](https://pdfium.googlesource.com/pdfium/) wasm (BSD-3-Clause) with subset-embedded fonts — no cover-up annotations. |
+| `apps/markdown` | **DeepOffice Markdown** | `.md` / `.markdown` editor: Tiptap block editor over plain Markdown files — headings, lists, tables, images, code blocks — saved back as plain Markdown, hosted in shell tabs.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `apps/shell`    | **DeepOffice**          | The suite shell: home screen, tabbed hosting of the five editors, light/dark/system theme, auto-update.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Every app embeds the same AI panel: block-granular AI editing with version
 snapshots and diffs in docs, a tool-calling agent over workbook/slide/PDF
@@ -90,25 +117,8 @@ The deck-generation steps (style planning, page-by-page design) can run on a
 different OpenAI-compatible endpoint than the rest of the suite — e.g. a
 stronger model on [OpenRouter](https://openrouter.ai) or a local
 [Ollama](https://ollama.com) server — while chat and the other apps keep their
-configured provider. Three environment variables control it:
-
-```bash
-# Windows: set SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1 ... etc.
-export SLIDES_AI_BASE_URL=https://openrouter.ai/api/v1   # or http://localhost:11434/v1 for Ollama
-export SLIDES_AI_MODEL=openai/gpt-5.6-luna               # e.g. anthropic/claude-sonnet-5, moonshotai/kimi-k3
-export SLIDES_AI_KEY=sk-or-...                           # the endpoint's API key (omit to reuse the custom provider key)
-```
-
-Unset variables disable the override; failed generation requests fall back to the
-user's configured model automatically.
-
-> **Gotcha:** `npm run dev` must be started from a terminal where the variables
-> are actually visible (`env | grep -i slide` prints all three) — terminals
-> opened _before_ the variables were set never see them, and neither does a
-> running app. On startup the dev terminal prints
-> `[slides-ai] local deck generation active (override: <model> @ <base>)` — that
-> line proves the main process sees the override. AI failures append to
-> `%TEMP%\genoffice-ai-errors.log` for debugging.
+configured provider. Configure it with the `SLIDES_AI_*` variables in
+[Environment variables](#environment-variables).
 
 ## Engine packages
 
@@ -198,21 +208,21 @@ editor didn't touch survives the round trip untouched.
 
 ## FAQ
 
-**Is GenOffice free?**
-Yes. GenOffice is free and open-source under the Apache-2.0 license — no
+**Is DeepOffice free?**
+Yes. DeepOffice is free and open-source under the Apache-2.0 license — no
 trial, no paid tier for the apps themselves.
 
-**Can GenOffice open Microsoft Word, Excel, and PowerPoint files?**
-Yes. GenOffice opens and saves native `.docx`, `.xlsx`, and `.pptx` files.
+**Can DeepOffice open Microsoft Word, Excel, and PowerPoint files?**
+Yes. DeepOffice opens and saves native `.docx`, `.xlsx`, and `.pptx` files.
 Saving is byte-preserving: parts of the file you didn't touch are written
 back byte-for-byte, so documents keep working in Microsoft Office.
 
-**Does GenOffice work offline?**
+**Does DeepOffice work offline?**
 Document editing is fully local — files never leave your machine to be
 opened, edited, or saved. The AI features (agents, search, image tools) sign
 in to a Genspark account and need a network connection.
 
-**Can GenOffice edit PDF files?**
+**Can DeepOffice edit PDF files?**
 Yes — real PDF text and image editing that rewrites the page content stream
 with the original fonts preserved, not cover-up annotations.
 
@@ -224,7 +234,7 @@ AI-generated content.
 
 ## Acknowledgements
 
-GenOffice would not be possible without these open-source projects:
+DeepOffice would not be possible without these open-source projects:
 
 - [Electron](https://www.electronjs.org/) — the desktop runtime for every app.
 - [Univer](https://github.com/dream-num/univer) (Apache-2.0) — the spreadsheet
@@ -256,10 +266,10 @@ Caladea, Noto CJK subsets) are OFL/Apache.
 
 ## License
 
-GenOffice is licensed under the [Apache License 2.0](LICENSE), with one
+DeepOffice is licensed under the [Apache License 2.0](LICENSE), with one
 exception: the `ee/` directory is reserved for future enterprise modules and
-is covered by the [GenOffice Enterprise License](ee/LICENSE).
+is covered by the [DeepOffice Enterprise License](ee/LICENSE).
 
-The GenOffice and Genspark names and logos are trademarks of Mainfunc, Inc.
+The DeepOffice and Genspark names and logos are trademarks of Mainfunc, Inc.
 The Apache-2.0 license does not grant permission to use them (see section 6);
 forks should use their own branding.
