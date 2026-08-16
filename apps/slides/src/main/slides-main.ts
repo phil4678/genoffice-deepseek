@@ -1301,8 +1301,10 @@ export function registerSlidesIpc(): void {
   // ── Cloud single-page generation (gsk slide_generate): brief → cloud HTML+conversion → one-slide
   // pptx saved to a temp file. Returns a marker string that flows through the same pagesHtml slots
   // as locally generated HTML; slides:html-to-pptx recognizes it and reads the bytes instead of
-  // converting. Enabled when gsk is logged in; GENOFFICE_CLOUD_SLIDE=0 is the kill switch.
-  const cloudSlideEnabled = () => process.env.GENOFFICE_CLOUD_SLIDE !== '0' && !!gskApiKey()
+  // converting. Opt-in: requires GENOFFICE_CLOUD_SLIDE=1 AND a gsk login. This fork
+  // defaults to the local HTML pipeline even when a gsk login exists — a Genspark
+  // account without credits made the old opt-out default fail every generation.
+  const cloudSlideEnabled = () => process.env.GENOFFICE_CLOUD_SLIDE === '1' && !!gskApiKey()
 
   ipcMain.handle('slides:cloud-gen-status', () => ({ enabled: cloudSlideEnabled() }))
 

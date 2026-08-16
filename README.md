@@ -172,7 +172,9 @@ is **fully local — no Genspark account needed**. The generation model writes e
 page's HTML and a local converter (`apps/slides/src/main/html-page.ts`) turns it
 into real editable pptx elements (textboxes, cards, backgrounds, downloaded
 images — failed image fetches degrade to a gray placeholder). The Genspark cloud
-path remains as an upstream-parity fallback when a gsk login exists.
+path is **opt-in** via `GENOFFICE_CLOUD_SLIDE=1` (and a gsk login) for upstream
+parity — it is off by default because a Genspark account without credits makes
+every generation fail.
 
 The deck-generation steps (style planning, page-by-page design) can run on a
 different OpenAI-compatible endpoint than the rest of the suite — e.g. a
