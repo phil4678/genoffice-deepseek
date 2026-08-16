@@ -168,7 +168,15 @@ export function registerAiIpc(): void {
 export function registerSlidesOnlyAiIpc(): void {
   // Startup marker for dev debugging: if this line is missing from the `npm run dev`
   // terminal, the running main process predates the local deck-generation code.
-  console.log('[slides-ai] local deck generation active (ai-override + html-page converter)')
+  const ovBase = process.env.SLIDES_AI_BASE_URL
+  const ovModel = process.env.SLIDES_AI_MODEL
+  console.log(
+    `[slides-ai] local deck generation active (override: ${
+      ovBase && ovModel
+        ? `${ovModel} @ ${ovBase}`
+        : 'NONE — SLIDES_AI_* env vars are not visible to this process'
+    })`,
+  )
   // Optional slides-generation model override: SLIDES_AI_BASE_URL + SLIDES_AI_MODEL route
   // the deck-generation LLM steps through a different OpenAI-compatible endpoint (e.g.
   // OpenRouter or a local Ollama server) while the rest of the suite keeps its provider.
