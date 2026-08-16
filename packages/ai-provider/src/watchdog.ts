@@ -7,14 +7,16 @@
 
 export const AI_CONNECT_TIMEOUT_MS = 60_000
 /**
- * Generous on purpose: on long-context requests the gateway can legitimately go
- * silent for minutes (thinking/buffering before the first token and between
- * chunks). 60s here killed real in-progress generations that were still billed,
- * so only genuinely dead connections should trip this.
+ * Idle timeout, re-armed on every received byte: a genuinely dead connection
+ * (dropped by a proxy/VPN/firewall without an RST) is killed after this long
+ * without data. Long silent think-buffering windows still fit under 90s, and
+ * the shorter cap stops stalled requests from burning billed tokens or leaving
+ * the UI busy for minutes. Keep the renderer silence watchdog (electron-transport)
+ * above this value.
  */
-export const AI_IDLE_TIMEOUT_MS = 180_000
+export const AI_IDLE_TIMEOUT_MS = 90_000
 /** Non-streaming chat waits for the full generation before headers arrive */
-export const AI_CHAT_RESPONSE_TIMEOUT_MS = 180_000
+export const AI_CHAT_RESPONSE_TIMEOUT_MS = 90_000
 
 export class AiTimeoutError extends Error {
   constructor(ms: number) {

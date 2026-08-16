@@ -133,6 +133,9 @@ export function AiPanel({
     loopRef.current = new AgentLoop({
       transport: createElectronTransport(() => settingsRef.current!),
       skill: createPdfSkill(deps),
+      // Cap tool round-trips: PDF edits are bounded work, and runaway loops are
+      // the main credit sink (each turn re-sends the growing history)
+      maxTurns: 6,
       systemSuffix: () => aiLangDirective(langRef.current),
       events: {
         onText: (text) => {
@@ -599,7 +602,7 @@ export function GensparkMark({ size = 18 }: { size?: number }): React.JSX.Elemen
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
-        <path
+      <path
         fillRule="evenodd"
         clipRule="evenodd"
         d="M105.115 0H24.643C11.044 0 0 11.069 0 24.691v80.643C0 118.981 11.02 130.025 24.643 130.025h80.472C118.714 130.025 129.758 118.957 129.758 105.334V24.691C129.758 11.044 118.714 0 105.115 0Zm-40.115 30c2.6 18.8 12.2 29.4 35 35-22.8 5.6-32.4 16.2-35 35-2.6-18.8-12.2-29.4-35-35 22.8-5.6 32.4-16.2 35-35Z"
