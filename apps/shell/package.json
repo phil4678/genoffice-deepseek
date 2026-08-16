@@ -1,11 +1,11 @@
 {
   "name": "@genoffice/shell",
-  "productName": "GenOffice",
+  "productName": "DeepOffice",
   "version": "0.6.0",
   "license": "Apache-2.0",
   "homepage": "https://github.com/genspark-ai/genoffice",
   "private": true,
-  "description": "Unified GenOffice shell: one app hosting the docs and sheets modules behind a home/launcher window",
+  "description": "Unified DeepOffice shell: one app hosting the docs and sheets modules behind a home/launcher window",
   "main": "out/main/index.js",
   "desktopName": "genoffice.desktop",
   "scripts": {
@@ -44,5 +44,5 @@
     "vite": "^7.3.1",
     "vitest": "^4.1.10"
   },
-  "author": "GenOffice"
+  "author": "DeepOffice"
 }

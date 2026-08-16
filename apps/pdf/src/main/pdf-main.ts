@@ -415,7 +415,7 @@ interface RuntimePaths {
   preloadPath: string
   rendererUrl?: string
   rendererFile?: string
-  /** Shell router used to open generated PDFs in a new GenOffice tab. */
+  /** Shell router used to open generated PDFs in a new DeepOffice tab. */
   openGeneratedPath?: (path: string) => boolean
 }
 

@@ -441,7 +441,7 @@ export function cssFontFamily(font: string): string {
   if (f.includes('隶书') || f.includes('lisu'))
     return `${chain(font, 'Baoli SC', 'LiSu', CJK_SERIF)},serif`
   // Japanese/Korean/Traditional Chinese: fall back within the same script (win/mac family names as mutual backups) so Han glyphs don't render with Simplified forms.
-  // 'GenOffice *' entries are CJK-only local() aliases (fonts.css): the underlying
+  // 'DeepOffice *' entries are CJK-only local() aliases (fonts.css): the underlying
   // system faces draw Cyrillic/Greek fullwidth, so those scripts must pass through
   const JA_SANS = ['Yu Gothic', 'GenOffice Hiragino Sans', 'Meiryo', 'Noto Sans JP']
   const JA_SERIF = [
@@ -550,7 +550,7 @@ export function cssFontFamily(font: string): string {
   // Kefa alias (fonts.css) re-centers Chromium's ~1.35x-wide Kefa fallback. On
   // Windows the declared name resolves natively ahead of the alias.
   if (/nyala|ebrima|abyssinica|ethiopic/i.test(nfkc)) {
-    return `${chain(font, 'GenOffice Ethiopic')},sans-serif`
+    return `${chain(font, 'DeepOffice Ethiopic')},sans-serif`
   }
   // Tamil: macOS system faces stand in for Latha/Noto Sans Tamil; on Windows
   // the declared name resolves natively.
