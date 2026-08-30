@@ -8,6 +8,7 @@ const SUBTYPE_CODE: Record<AnnotDeleteInput['subtype'], number> = {
   underline: 10,
   strikeout: 12,
   note: 1, // FPDF_ANNOT_TEXT (sticky-note comments)
+  freetext: 3, // FPDF_ANNOT_FREETEXT (on-page text boxes)
 }
 
 /** Match tolerance for the rect fallback (float32 round-trips only; rects travel unchanged) */

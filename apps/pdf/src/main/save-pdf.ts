@@ -237,6 +237,76 @@ async function addImageStamp(
   appendAnnot(pdfDoc, page, pdfDoc.context.register(annot))
 }
 
+/**
+ * On-page text comment (FreeText annotation). Hand-written AP text lines at the
+ * renderer-computed baselines, counter-rotated against the page's final /Rotate
+ * (viewers rotate annotation appearances with the page), so the saved text stays
+ * upright exactly where the preview showed it. The font is an embedded subset —
+ * PDFHexString Contents keeps CJK round-tripping, and the hex glyph IDs come from
+ * pdf-lib's fontkit layout of the subset's cmap (no string escaping involved).
+ */
+async function addTextBox(
+  pdfDoc: PDFDocument,
+  page: PDFPage,
+  d: Extract<DrawingInput, { kind: 'text' }>,
+): Promise<void> {
+  const [r, g, b] = d.color
+  if (!d.text.replace(/\n/g, '').trim()) return // empty box: nothing to draw
+  // Validate the drawable line/baseline pairs first: a lines/text mismatch must
+  // not spend the subset-and-embed work on a font that would then be discarded
+  const split = d.text.split('\n')
+  const lines = d.lines.flatMap((line, i) => {
+    const lineText = split[i]?.trim()
+    return lineText ? [{ line, lineText }] : []
+  })
+  if (lines.length === 0) return
+  const { annotTextFontBytes, textInsertAxes } = await import('./text-edit')
+  // pdf-lib needs a fontkit instance to embed custom fonts (its devDependency by
+  // design; consumers register their own — the first such use in this codebase)
+  const { default: fontkit } = await import('@pdf-lib/fontkit')
+  pdfDoc.registerFontkit(fontkit)
+  // Re-home the bytes into this realm's Uint8Array: pdf-lib's embedFont assertIs
+  // uses instanceof, which a Node Buffer fails under jsdom's separate intrinsics
+  // (same reason savePdfToPath wraps readFile output)
+  const subset = await annotTextFontBytes(d.font, d.text)
+  const font = await pdfDoc.embedFont(new Uint8Array(subset))
+  const rot = ((page.getRotation().angle % 360) + 360) % 360
+  const [ma, mb, mc, md] = textInsertAxes(rot)
+  const ops = lines.map(
+    ({ line, lineText }) =>
+      `BT /F1 ${num(d.fontSize)} Tf ${num(ma)} ${num(mb)} ${num(mc)} ${num(md)} ` +
+      `${num(line.x)} ${num(line.y)} Tm ${font.encodeText(lineText)} Tj ET`,
+  )
+  const rect = [num(d.rect[0]), num(d.rect[1]), num(d.rect[2]), num(d.rect[3])]
+  const ap = pdfDoc.context.stream(ops.join('\n'), {
+    Type: 'XObject',
+    Subtype: 'Form',
+    BBox: rect,
+    Resources: { Font: { F1: font.ref } },
+  })
+  const annot = pdfDoc.context.obj({
+    Type: 'Annot',
+    Subtype: 'FreeText',
+    Rect: rect,
+    C: d.color,
+    F: 4, // print
+    Q: 0, // left-aligned
+    P: page.ref,
+    AP: { N: pdfDoc.context.register(ap) },
+  })
+  // obj() literal strings become PDFNames; DA is a text string, set it explicitly
+  annot.set(
+    PDFName.of('DA'),
+    PDFString.of(`/F1 ${num(d.fontSize)} Tf ${num(r)} ${num(g)} ${num(b)} rg`),
+  )
+  annot.set(PDFName.of('T'), PDFHexString.fromText(d.author || 'DeepOffice'))
+  annot.set(PDFName.of('Contents'), PDFHexString.fromText(d.text))
+  const when = pdfDateString(Date.now())
+  annot.set(PDFName.of('CreationDate'), PDFString.of(when))
+  annot.set(PDFName.of('M'), PDFString.of(when))
+  appendAnnot(pdfDoc, page, pdfDoc.context.register(annot))
+}
+
 /** Epoch ms → PDF date string, e.g. D:20260812175959+08'00' */
 function pdfDateString(ms: number): string {
   const d = new Date(ms)
@@ -361,7 +431,7 @@ function addDrawing(
     else ops.push(...ellipseOps(x1, y1, x2, y2))
     xs = [x1, x2]
     ys = [y1, y2]
-  } else {
+  } else if (d.kind === 'line' || d.kind === 'arrow') {
     const [fx, fy] = d.from
     const [tx, ty] = d.to
     subtype = 'Line'
@@ -379,6 +449,8 @@ function addDrawing(
         ys.push(hy)
       }
     }
+  } else {
+    return // kind 'text' is written by addTextBox, never addDrawing
   }
 
   const pad = d.width + 2
@@ -916,6 +988,7 @@ export async function applySaveRequest(
     const page = pages[d.pageIndex]
     if (!page) continue
     if (d.kind === 'image') await addImageStamp(pdfDoc, page, d)
+    else if (d.kind === 'text') await addTextBox(pdfDoc, page, d)
     else addDrawing(pdfDoc, page, d, noteRefs)
   }
   for (const s of request.stamps ?? []) {

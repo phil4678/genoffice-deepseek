@@ -1,9 +1,27 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, degrees } from 'pdf-lib'
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFRawStream,
+  PDFRef,
+  PDFString,
+  decodePDFRawStream,
+  degrees,
+} from 'pdf-lib'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import {
   applySaveRequest,
@@ -647,6 +665,156 @@ describe('applySaveRequest', () => {
       }),
     )
     expect((await PDFDocument.load(saved)).getPageCount()).toBe(1)
+  })
+
+  const textDrawing = (
+    over: Partial<Extract<SavePdfRequest['drawings'][number], { kind: 'text' }>> = {},
+  ) => ({
+    kind: 'text' as const,
+    pageIndex: 0,
+    color: [0.17, 0.4, 1],
+    width: 2,
+    rect: [100, 650, 300, 684],
+    text: 'Hello world',
+    fontSize: 14,
+    font: 'arial',
+    lines: [{ x: 100, y: 664 }],
+    ...over,
+  })
+
+  /** Decoded page content streams concatenated, for untouched-content comparison */
+  const contentSignature = (doc: PDFDocument): string => {
+    const c = doc.getPage(0).node.Contents()
+    if (c instanceof PDFRawStream) return new TextDecoder().decode(decodePDFRawStream(c).decode())
+    if (Array.isArray(c)) {
+      return c
+        .map((s) => new TextDecoder().decode(decodePDFRawStream(s as PDFRawStream).decode()))
+        .join('|')
+    }
+    return ''
+  }
+
+  const apOps = (annot: PDFDict): string => {
+    const ap = annot.lookup(PDFName.of('AP'), PDFDict).lookup(PDFName.of('N'))
+    return new TextDecoder().decode(decodePDFRawStream(ap as PDFRawStream).decode())
+  }
+
+  it('writes a text-box drawing as a FreeText annotation with a vector appearance', async () => {
+    const bytes = await makePdf([[612, 792]])
+    const saved = await apply(bytes, request({ drawings: [textDrawing()] }))
+    const out = await PDFDocument.load(saved)
+    const annots = pageAnnots(out, 0)
+    expect(annots.map(subtypeOf)).toEqual(['FreeText'])
+    const annot = annots[0]!
+    expect(annot.lookup(PDFName.of('Contents'), PDFHexString).decodeText()).toBe('Hello world')
+    expect(annot.lookup(PDFName.of('DA'), PDFString).decodeText()).toBe('/F1 14 Tf 0.17 0.4 1 rg')
+    // Author omitted → the 'DeepOffice' default (the note path's convention)
+    expect(annot.lookup(PDFName.of('T'), PDFHexString).decodeText()).toBe('DeepOffice')
+    const ap = annot.lookup(PDFName.of('AP'), PDFDict).lookup(PDFName.of('N'))
+    expect(ap).toBeDefined()
+    const ops = apOps(annot)
+    expect(ops).toContain('BT /F1 14 Tf 1 0 0 1 100 664 Tm')
+    expect(ops).toContain('Tj ET')
+    // The appearance draws with an embedded subset font (Type0 with FontFile2)
+    const fonts = (ap as PDFRawStream).dict.lookup(PDFName.of('Resources'), PDFDict)
+    const f1 = fonts.lookup(PDFName.of('Font'), PDFDict).get(PDFName.of('F1')) as PDFRef
+    const fontDict = out.context.lookup(f1, PDFDict)
+    expect(fontDict.lookup(PDFName.of('Subtype'), PDFName).decodeText()).toBe('Type0')
+    const descriptor = fontDict
+      .lookup(PDFName.of('DescendantFonts'), PDFArray)
+      .lookup(0, PDFDict)
+      .lookup(PDFName.of('FontDescriptor'), PDFDict)
+    expect(descriptor.has(PDFName.of('FontFile2'))).toBe(true)
+  })
+
+  it('keeps the page content untouched when a text box is added', async () => {
+    const doc = await PDFDocument.create()
+    const page = doc.addPage([612, 792])
+    page.drawText('original content', { x: 50, y: 700, size: 12 })
+    const bytes = await doc.save({ useObjectStreams: false })
+    const before = contentSignature(await PDFDocument.load(bytes))
+    const saved = await apply(bytes, request({ drawings: [textDrawing()] }))
+    const after = contentSignature(await PDFDocument.load(saved))
+    expect(after).toBe(before)
+  })
+
+  it('counter-rotates the text appearance on rotated pages', async () => {
+    const bytes = await makePdf([[612, 792]])
+    const saved = await apply(
+      bytes,
+      request({
+        rotations: [{ pageIndex: 0, delta: 90 }],
+        drawings: [textDrawing()],
+      }),
+    )
+    const out = await PDFDocument.load(saved)
+    const annot = pageAnnots(out, 0)[0]!
+    expect(apOps(annot)).toContain('0 1 -1 0')
+  })
+
+  it('writes multi-line boxes with one text op per line at their baselines', async () => {
+    const bytes = await makePdf([[612, 792]])
+    const saved = await apply(
+      bytes,
+      request({
+        drawings: [
+          textDrawing({
+            text: 'First line\nSecond line',
+            author: 'Jane',
+            rect: [100, 616, 300, 684],
+            lines: [
+              { x: 100, y: 664 },
+              { x: 100, y: 647 },
+            ],
+          }),
+        ],
+      }),
+    )
+    const annot = pageAnnots(await PDFDocument.load(saved), 0)[0]!
+    expect(annot.lookup(PDFName.of('Contents'), PDFHexString).decodeText()).toBe(
+      'First line\nSecond line',
+    )
+    expect(annot.lookup(PDFName.of('T'), PDFHexString).decodeText()).toBe('Jane')
+    const ops = apOps(annot)
+    expect(ops.split('Tj').length).toBe(3) // two Tj + trailing
+  })
+
+  it('writes no annotation for an empty text box', async () => {
+    const bytes = await makePdf([[612, 792]])
+    const saved = await apply(bytes, request({ drawings: [textDrawing({ text: '  \n ' })] }))
+    expect(pageAnnots(await PDFDocument.load(saved), 0)).toHaveLength(0)
+  })
+
+  it('round-trips CJK contents with a fallback font when one is installed', async () => {
+    // Windows: Arial Unicode MS; macOS: Arial Unicode. Linux CI lacks either and skips.
+    if (
+      !existsSync('C:\\Windows\\Fonts\\arialuni.ttf') &&
+      !existsSync('/System/Library/Fonts/Supplemental/Arial Unicode.ttf')
+    )
+      return
+    const bytes = await makePdf([[612, 792]])
+    const saved = await apply(
+      bytes,
+      request({
+        drawings: [
+          textDrawing({
+            text: '插入中文注释',
+            rect: [100, 650, 300, 684],
+            lines: [{ x: 100, y: 664 }],
+          }),
+        ],
+      }),
+    )
+    const annot = pageAnnots(await PDFDocument.load(saved), 0)[0]!
+    expect(annot.lookup(PDFName.of('Contents'), PDFHexString).decodeText()).toBe('插入中文注释')
+    const loadingTask = getDocument({ data: saved.slice() })
+    try {
+      const pdfJsAnnotations = await (await (await loadingTask.promise).getPage(1)).getAnnotations()
+      const freetext = pdfJsAnnotations.find((a) => a.annotationType === 3)
+      expect(freetext?.contentsObj?.str).toBe('插入中文注释')
+    } finally {
+      await loadingTask.destroy()
+    }
   })
 
   it('applies metadata and splits keywords on mixed separators', async () => {

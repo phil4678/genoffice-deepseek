@@ -87,7 +87,7 @@ export interface AnnotDeleteInput {
   pageIndex: number
   /** PDF object number (pdf.js annotation id "123R" → 123) */
   objNum: number
-  subtype: MarkupType | 'note'
+  subtype: MarkupType | 'note' | 'freetext'
   /** Annotation /Rect in PDF user space, for fallback matching */
   rect: [number, number, number, number]
   /** /Contents to match. Required identity for notes: every comment of a thread shares
@@ -151,6 +151,28 @@ export type DrawingInput =
       replyToSaved?: NoteReplyTarget
       /** This note replies to another note in this request, by its localId */
       replyToLocalId?: string
+    }
+  | {
+      /** On-page text comment (FreeText annotation). Text is pre-wrapped by the
+          renderer; '\n' are explicit line breaks. The engine writes the AP lines
+          verbatim at the given baselines. */
+      kind: 'text'
+      pageIndex: number
+      color: [number, number, number]
+      width: number // unused, kept for DrawBase union uniformity
+      /** Identity/hit-test box in PDF user space; final height = lines × leading */
+      rect: [number, number, number, number]
+      /** Pre-wrapped text, '\n'-separated lines */
+      text: string
+      /** Font size in PDF pt */
+      fontSize: number
+      /** EDIT_FONTS id; the engine resolves the face and falls back for CJK */
+      font: string
+      /** Annotation author (/T); omitted → 'DeepOffice' */
+      author?: string
+      /** Per-line baseline origins (PDF user space, y up), one per '\n' line.
+          Renderer-computed (rotation-aware) so the engine needs no wrap math. */
+      lines: { x: number; y: number }[]
     }
 
 /**

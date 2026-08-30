@@ -3,6 +3,9 @@ import type { DrawingInput } from '../shared/ipc'
 /** pdf.js AnnotationType.TEXT (sticky-note comments) */
 export const PDFJS_ANNOT_TEXT = 1
 
+/** pdf.js AnnotationType.FREETEXT (on-page text boxes) */
+export const PDFJS_ANNOT_FREETEXT = 3
+
 export type NoteInput = Extract<DrawingInput, { kind: 'note' }>
 
 /** A note (Text) annotation already saved in the file (read via pdf.js getAnnotations) */
@@ -109,6 +112,37 @@ export function toSavedNote(a: PdfJsAnnotData, pageIndex: number): SavedNoteAnno
     contents: a.contentsObj?.str ?? '',
     timeMs: parsePdfDate(a.creationDate) ?? parsePdfDate(a.modificationDate),
     inReplyTo: parent ? Number(parent[1]) : null,
+  }
+}
+
+/** An on-page text box (FreeText) annotation already saved in the file */
+export interface SavedFreeTextAnnot {
+  pageIndex: number
+  objNum: number
+  type: 'freetext'
+  rect: [number, number, number, number]
+  /** rgb 0-1; null when the annotation has no /C */
+  color: [number, number, number] | null
+  contents: string
+}
+
+/** pdf.js annotation → SavedFreeTextAnnot. Null for non-FreeText annots, hidden
+    ones, and annots not backed by an object ref (unaddressable for delete). */
+export function toSavedFreeText(a: PdfJsAnnotData, pageIndex: number): SavedFreeTextAnnot | null {
+  if (a.annotationType !== PDFJS_ANNOT_FREETEXT || a.hidden) return null
+  const objNum = /^(\d+)R$/.exec(a.id)
+  if (!objNum || !Array.isArray(a.rect) || a.rect.length !== 4) return null
+  const color =
+    a.color && a.color.length >= 3
+      ? ([a.color[0]! / 255, a.color[1]! / 255, a.color[2]! / 255] as [number, number, number])
+      : null
+  return {
+    pageIndex,
+    objNum: Number(objNum[1]),
+    type: 'freetext',
+    rect: [a.rect[0]!, a.rect[1]!, a.rect[2]!, a.rect[3]!],
+    color,
+    contents: a.contentsObj?.str ?? '',
   }
 }
 

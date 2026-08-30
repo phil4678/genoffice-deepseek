@@ -1727,6 +1727,69 @@ button {
   cursor: text;
 }
 
+/* ── On-page text box (FreeText) ── */
+
+/* Committed box: document data (text color/style come inline from the drawing);
+   the selected outline is chrome and uses the text-edit ring token */
+.pdf-draw-text {
+  position: absolute;
+  z-index: 4;
+  cursor: move;
+  touch-action: none;
+  white-space: pre;
+  overflow: visible;
+  user-select: none;
+}
+
+.pdf-draw-text.pdf-draw-selected {
+  outline: 1px solid var(--pdf-textedit-ring);
+  outline-offset: 1px;
+}
+
+/* Inline editor for the box being typed (chrome around document data) */
+.pdf-textbox-editor {
+  position: absolute;
+  z-index: 6;
+}
+
+.pdf-textbox-editor textarea {
+  display: block;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 2px;
+  border: 1px solid var(--pdf-textedit-ring);
+  border-radius: 2px;
+  background: var(--pdf-textedit-paper);
+  color: var(--pdf-textedit-ink);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.pdf-textbox-actions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.pdf-textbox-actions button {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Paragraph boxes in edit-text mode (see text-block.ts): a faint outline on every
    block so editable units read at a glance (WPS-style); page-anchored chrome, so
    the ring colors stay unthemed like the rest of the text-edit set */

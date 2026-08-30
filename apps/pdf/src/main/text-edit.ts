@@ -981,6 +981,26 @@ async function rebuildFontBytes(
   return subsetTtf(fallback, drawn)
 }
 
+/** Font bytes for a brand-new annotation text run (no original document font to
+    inherit): the chosen EDIT_FONTS face when it covers the text, else the CJK
+    fallback face. Throws when no available face covers the text (emoji beyond
+    Arial Unicode) — the caller aborts the drawing rather than embed .notdef boxes. */
+export async function annotTextFontBytes(
+  fontId: string | undefined,
+  text: string,
+): Promise<Buffer> {
+  const drawn = text.replace(/\n/g, '')
+  if (fontId) {
+    const chosen = loadEditFont(fontId)
+    if (chosen && fontCoversText(chosen, drawn)) return subsetTtf(chosen, drawn)
+  }
+  const fallback = loadFallbackFont()
+  if (!fontCoversText(fallback, drawn)) {
+    throw new Error('the text contains characters no available font can draw')
+  }
+  return subsetTtf(fallback, drawn)
+}
+
 /** Extra leading between stacked lines, multiple of the font size (matches the preview CSS) */
 const LINE_GAP = 1.2
 

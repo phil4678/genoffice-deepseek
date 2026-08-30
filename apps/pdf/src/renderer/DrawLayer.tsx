@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
-import { pdfToView, viewToPdf } from './annotations'
+import { pdfRectToCss, pdfToView, viewToPdf } from './annotations'
 import type { PageGeom } from './annotations'
+import { EDIT_FONTS } from '../shared/ipc'
 import type { DrawingInput } from '../shared/ipc'
 
-export type DrawTool = 'ink' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'note'
+export type DrawTool = 'ink' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'note' | 'textbox'
+
+/** EDIT_FONTS id → CSS stack; text boxes render with the same faces the engine embeds */
+const EDIT_FONT_CSS = new Map<string, string>(EDIT_FONTS.map((f) => [f.id, f.css]))
 
 /** Displayed-pixel box (scaled) */
 interface Box {
@@ -59,7 +63,7 @@ function drawingShape(
   /** Invisible fat outline: rendered under pointer-events:stroke so thin shapes are grabbable */
   hit = false,
 ): ReactElement | null {
-  if (d.kind === 'note') return null
+  if (d.kind === 'note' || d.kind === 'text') return null
   if (d.kind === 'image') {
     if (hit) return null // the image body is already a full-area hit target
     const [ax, ay] = toView(geom, scale, d.rect[0], d.rect[1])
@@ -175,6 +179,8 @@ export function DrawLayer({
   onSelect,
   onMove,
   onResize,
+  onTextBoxRect,
+  onEditText,
 }: {
   geom: PageGeom
   scale: number
@@ -200,6 +206,10 @@ export function DrawLayer({
   onMove?: (id: string, dx: number, dy: number) => void
   /** Replace an image drawing's PDF-space rect (corner-handle resize); omit to disable */
   onResize?: (id: string, rect: [number, number, number, number]) => void
+  /** Text-box drag finished; the rect becomes an open draft editor (no drawing yet) */
+  onTextBoxRect?: (rect: [number, number, number, number]) => void
+  /** Reopen the inline editor for a committed text box (double-click) */
+  onEditText?: (id: string) => void
 }): ReactElement {
   // In-progress stroke/drag, all in PDF-space coordinates
   const [live, setLive] = useState<DrawingInput | null>(null)
@@ -243,10 +253,11 @@ export function DrawLayer({
     if (tool === 'ink') {
       inkRef.current = [...inkRef.current, at[0], at[1]]
       setLive({ kind: 'ink', pageIndex: 0, color, width: strokeWidth, paths: [inkRef.current] })
-    } else if (tool === 'rect' || tool === 'ellipse') {
+    } else if (tool === 'rect' || tool === 'ellipse' || tool === 'textbox') {
+      // The textbox preview draws as a rect (its live shape is just the box)
       const [sx, sy] = startRef.current
       setLive({
-        kind: tool,
+        kind: tool === 'textbox' ? 'rect' : tool,
         pageIndex: 0,
         color,
         width: strokeWidth,
@@ -279,17 +290,23 @@ export function DrawLayer({
     if (pending.kind === 'line' || pending.kind === 'arrow') {
       if (Math.hypot(pending.to[0] - pending.from[0], pending.to[1] - pending.from[1]) < 4) return
     }
+    if (pending.kind === 'rect' && tool === 'textbox') {
+      onTextBoxRect?.(pending.rect)
+      return
+    }
     onCommit(pending)
   }
 
   // ── Drag-to-move an existing shape (no tool active) ──
 
-  const shapeViewPos = (e: ReactPointerEvent<SVGGElement>): [number, number] => {
-    const box = e.currentTarget.ownerSVGElement!.getBoundingClientRect()
+  // SVG shapes and text-box divs share these handlers: both have a parent filling
+  // the page at (0,0) — the <g> parent is the draw <svg>, the div parent is .pdf-page
+  const shapeViewPos = (e: ReactPointerEvent<Element>): [number, number] => {
+    const box = (e.currentTarget.parentElement ?? e.currentTarget).getBoundingClientRect()
     return [(e.clientX - box.left) / scale, (e.clientY - box.top) / scale]
   }
 
-  const shapeDown = (e: ReactPointerEvent<SVGGElement>, id: string) => {
+  const shapeDown = (e: ReactPointerEvent<Element>, id: string) => {
     if (tool || e.button !== 0) return
     // Without preventDefault the drag would also start a text selection in the
     // text layer underneath (and pop the markup bar on release)
@@ -300,11 +317,11 @@ export function DrawLayer({
     setDrag({ id, from: at, to: at })
   }
 
-  const shapeMove = (e: ReactPointerEvent<SVGGElement>) => {
+  const shapeMove = (e: ReactPointerEvent<Element>) => {
     if (drag && onMove) setDrag({ ...drag, to: shapeViewPos(e) })
   }
 
-  const shapeUp = (e: ReactPointerEvent<SVGGElement>) => {
+  const shapeUp = (e: ReactPointerEvent<Element>) => {
     const d = drag
     setDrag(null)
     if (!d) return
@@ -390,7 +407,7 @@ export function DrawLayer({
         onPointerCancel={onPointerUp}
       >
         {drawings.map((d) =>
-          d.input.kind === 'note' ? null : (
+          d.input.kind === 'note' || d.input.kind === 'text' ? null : (
             <g
               key={d.id}
               className={`pdf-draw-shape${d.id === selectedId ? ' pdf-draw-selected' : ''}`}
@@ -490,6 +507,44 @@ export function DrawLayer({
           </button>
         )
       })}
+      {/* Committed text boxes: HTML overlays so the text wraps/renders with the same
+          CSS faces the engine embeds; click-select, drag-move, double-click to edit */}
+      {drawings
+        .filter((d) => d.input.kind === 'text')
+        .map((d) => {
+          const t = d.input as Extract<DrawingInput, { kind: 'text' }>
+          return (
+            <div
+              key={d.id}
+              className={`pdf-draw-text${d.id === selectedId ? ' pdf-draw-selected' : ''}`}
+              title={selectTitle}
+              style={{
+                ...pdfRectToCss(geom, t.rect, scale),
+                pointerEvents: tool ? 'none' : 'auto',
+                fontSize: t.fontSize * scale,
+                lineHeight: `${t.fontSize * scale * 1.2}px`,
+                fontFamily: EDIT_FONT_CSS.get(t.font) ?? EDIT_FONT_CSS.get('arial'),
+                color: cssRgb(t.color),
+                transform:
+                  drag?.id === d.id
+                    ? `translate(${(drag.to[0] - drag.from[0]) * scale}px, ${
+                        (drag.to[1] - drag.from[1]) * scale
+                      }px)`
+                    : undefined,
+              }}
+              onPointerDown={(e) => shapeDown(e, d.id)}
+              onPointerMove={shapeMove}
+              onPointerUp={shapeUp}
+              onPointerCancel={() => setDrag(null)}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                if (!tool) onEditText?.(d.id)
+              }}
+            >
+              {t.text}
+            </div>
+          )
+        })}
     </>
   )
 }

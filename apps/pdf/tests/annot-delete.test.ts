@@ -137,3 +137,75 @@ describe('applySaveRequest with annotDeletes', () => {
     expect(after.map((a) => a.subtype).sort()).toEqual(['StrikeOut', 'Underline'])
   })
 })
+
+describe('applyAnnotDeletes with FreeText', () => {
+  const FT_TEXT = 'Review this'
+  const FT_RECT: [number, number, number, number] = [100, 650, 300, 684]
+
+  /** A one-page PDF with a saved on-page text box (written by the real save path) */
+  async function freeTextPdf(): Promise<Uint8Array> {
+    const doc = await PDFDocument.create()
+    doc.addPage([612, 792])
+    const { bytes } = await applySaveRequest(
+      await doc.save({ useObjectStreams: false }),
+      request({
+        drawings: [
+          {
+            kind: 'text',
+            pageIndex: 0,
+            color: [0.17, 0.4, 1],
+            width: 2,
+            rect: FT_RECT,
+            text: FT_TEXT,
+            fontSize: 14,
+            font: 'arial',
+            lines: [{ x: 100, y: 664 }],
+          },
+        ],
+      }),
+    )
+    return bytes
+  }
+
+  it('removes a saved text box by object number with contents identity', async () => {
+    const bytes = await freeTextPdf()
+    const before = await listAnnots(bytes)
+    expect(before.map((a) => a.subtype)).toEqual(['FreeText'])
+    const out = await applyAnnotDeletes(bytes, [
+      {
+        pageIndex: 0,
+        objNum: before[0]!.objNum,
+        subtype: 'freetext',
+        rect: before[0]!.rect,
+        contents: FT_TEXT,
+      },
+    ])
+    expect(await listAnnots(out)).toHaveLength(0)
+  })
+
+  it('falls back to subtype+rect+contents matching when the object number is stale', async () => {
+    const bytes = await freeTextPdf()
+    const out = await applyAnnotDeletes(bytes, [
+      { pageIndex: 0, objNum: 99999, subtype: 'freetext', rect: FT_RECT, contents: FT_TEXT },
+    ])
+    expect(await listAnnots(out)).toHaveLength(0)
+  })
+
+  it('keeps the box when the rect or contents do not match', async () => {
+    const bytes = await freeTextPdf()
+    const wrongContents = await applyAnnotDeletes(bytes, [
+      { pageIndex: 0, objNum: 99999, subtype: 'freetext', rect: FT_RECT, contents: 'other' },
+    ])
+    expect(await listAnnots(wrongContents)).toHaveLength(1)
+    const wrongRect = await applyAnnotDeletes(bytes, [
+      {
+        pageIndex: 0,
+        objNum: 99999,
+        subtype: 'freetext',
+        rect: [400, 400, 500, 420],
+        contents: FT_TEXT,
+      },
+    ])
+    expect(await listAnnots(wrongRect)).toHaveLength(1)
+  })
+})

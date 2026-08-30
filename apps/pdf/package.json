@@ -38,5 +38,8 @@
     "vite-plugin-static-copy": "^3.0.0",
     "vitest": "^4.1.10"
   },
-  "author": "DeepOffice"
+  "author": "DeepOffice",
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1"
+  }
 }

@@ -19,6 +19,7 @@ export default defineConfig({
         exclude: [
           '@genoffice/i18n',
           'pdf-lib',
+          '@pdf-lib/fontkit',
           '@genoffice/electron-utils',
           '@genoffice/font-metrics',
         ],

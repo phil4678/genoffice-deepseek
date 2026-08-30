@@ -29,14 +29,27 @@ import {
   viewToPdf,
 } from './annotations'
 import type { LocalMarkup, PageGeom } from './annotations'
+import { textBoxBaselines, wrapTextBox } from './textbox-wrap'
 import { groupLineSpans } from './text-line'
 import { DRAW_COLORS, DrawLayer, cssRgb } from './DrawLayer'
 import { ColorPickerPopover } from './ColorPicker'
 import type { DrawTool, LocalDrawing, SavedNotePin } from './DrawLayer'
 import { NoteMarginColumn } from './NoteMargin'
 import type { NoteMarginDraft, NoteMarginThread } from './NoteMargin'
-import { buildNoteThreads, pendingNoteKey, threadSubtree, toSavedNote } from './note-threads'
-import type { NoteInput, NoteThreadItem, PdfJsAnnotData, SavedNoteAnnot } from './note-threads'
+import {
+  buildNoteThreads,
+  pendingNoteKey,
+  threadSubtree,
+  toSavedFreeText,
+  toSavedNote,
+} from './note-threads'
+import type {
+  NoteInput,
+  NoteThreadItem,
+  PdfJsAnnotData,
+  SavedFreeTextAnnot,
+  SavedNoteAnnot,
+} from './note-threads'
 import { FormLayer } from './FormLayer'
 import {
   buildFormCatalog,
@@ -121,6 +134,11 @@ import type {
 const EDIT_FONT_BY_ID = new Map<string, (typeof EDIT_FONTS)[number]>(
   EDIT_FONTS.map((f) => [f.id, f]),
 )
+
+/** Fixed style of on-page text boxes (v1: no font/size picker) */
+const TEXTBOX_FONT_SIZE = 14
+const TEXTBOX_FONT = 'arial'
+const TEXTBOX_LINE_GAP = 1.2
 
 /** pdf.js AnnotationType codes for the markup subtypes we can delete */
 const MARKUP_TYPE_BY_ANNOT: Record<number, MarkupType> = {
@@ -482,6 +500,12 @@ const IconNote = () => (
   <Icon>
     <path d="M4.5 5.57 L19.5 5.57 L19.5 15.21 L10.93 15.21 L6.64 18.43 L6.64 15.21 L4.5 15.21 Z" />
     <path d="M8.25 9.32 L15.75 9.32 M8.25 12 L13.07 12" />
+  </Icon>
+)
+const IconTextBox = () => (
+  <Icon>
+    <rect x="4.5" y="5.5" width="15" height="13" rx="1.5" />
+    <path d="M8.25 9.5 H15.75 M8.25 13 H13.07" />
   </Icon>
 )
 const IconSign = () => (
@@ -932,6 +956,7 @@ const DRAW_TOOLS = [
   { tool: 'ellipse' as const, icon: IconEllipse, key: 'drawEllipse' as const },
   { tool: 'arrow' as const, icon: IconArrow, key: 'drawArrow' as const },
   { tool: 'note' as const, icon: IconNote, key: 'drawNote' as const },
+  { tool: 'textbox' as const, icon: IconTextBox, key: 'drawTextbox' as const },
 ]
 
 // ── ribbon tabs (docs-style tab strip over a fixed 80px band) ──
@@ -1380,10 +1405,10 @@ interface SavedMarkupAnnot {
   rect: [number, number, number, number]
 }
 
-/** Pending deletion of a saved markup or note annotation */
+/** Pending deletion of a saved markup, note, or text-box annotation */
 interface LocalAnnotDelete {
   id: string
-  annot: SavedMarkupAnnot | SavedNoteAnnot
+  annot: SavedMarkupAnnot | SavedNoteAnnot | SavedFreeTextAnnot
 }
 
 interface EditSnapshot {
@@ -1428,6 +1453,7 @@ type AnnotSelection =
       y: number
     }
   | { kind: 'savedMarkup'; annot: SavedMarkupAnnot; x: number; y: number }
+  | { kind: 'savedFreeText'; annot: SavedFreeTextAnnot; x: number; y: number }
   | { kind: 'pageImage'; ref: PageImageRef; x: number; y: number }
   | { kind: 'stamp'; x: number; y: number }
 
@@ -1602,6 +1628,8 @@ export default function App() {
   const [savedMarkups, setSavedMarkups] = useState<Map<number, SavedMarkupAnnot[]>>(new Map())
   /** Saved note (Text) comments per original page index, loaded in the same pass */
   const [savedNotes, setSavedNotes] = useState<Map<number, SavedNoteAnnot[]>>(new Map())
+  /** Saved on-page text boxes (FreeText) per original page index, same lazy pass */
+  const [savedFreeText, setSavedFreeText] = useState<Map<number, SavedFreeTextAnnot[]>>(new Map())
   /** Active comment thread: its margin card is expanded and linked to its pin */
   const [activeNote, setActiveNote] = useState<{ origIdx: number; rootKey: string } | null>(null)
   /** OS account name; the default author of new note comments */
@@ -1615,6 +1643,16 @@ export default function App() {
   const [highlightColorOpen, setHighlightColorOpen] = useState(false)
   const [drawings, setDrawings] = useState<LocalDrawing[]>([])
   const [drawTool, setDrawTool] = useState<DrawTool | null>(null)
+  /** Open on-page text-box editor; id null = fresh drag, set = editing a pending
+      drawing. color is the box's own color: seeded from the swatch on a fresh drag,
+      from the drawing on an edit (a later swatch change must not repaint the box). */
+  const [textBoxDraft, setTextBoxDraft] = useState<{
+    origIdx: number
+    id: string | null
+    rect: [number, number, number, number]
+    text: string
+    color: [number, number, number]
+  } | null>(null)
   const [textEdits, setTextEdits] = useState<LocalTextEdit[]>([])
   const [textInserts, setTextInserts] = useState<LocalTextInsert[]>([])
   const [pendingTextInsert, setPendingTextInsert] = useState<Omit<
@@ -2697,14 +2735,20 @@ export default function App() {
   useEffect(() => {
     setSavedMarkups(new Map())
     setSavedNotes(new Map())
+    setSavedFreeText(new Map())
     setActiveNote(null)
     setNoteDraft(null)
+    // A save-reload removes saved drawings from the pending list: an open editor
+    // whose target vanished would re-add the box on commit (duplicate annotation
+    // on the next save). Drop the draft like the note draft; the saved box is
+    // still on the page and can be deleted/re-created.
+    setTextBoxDraft(null)
   }, [doc])
 
-  /** Load saved markup + note annotations for pages scrolled into view: markups so
-      clicking one can select it for deletion, notes so their comment threads show.
-      Runs for read-only docs too (comments are viewable). Settles the same way as
-      the paragraph-box effect. */
+  /** Load saved markup + note + text-box annotations for pages scrolled into view:
+      markups and text boxes so clicking one can select it for deletion, notes so
+      their comment threads show. Runs for read-only docs too (comments are
+      viewable). Settles the same way as the paragraph-box effect. */
   useEffect(() => {
     if (!doc) return
     const missing: number[] = []
@@ -2715,9 +2759,11 @@ export default function App() {
     void (async () => {
       const markupEntries: [number, SavedMarkupAnnot[]][] = []
       const noteEntries: [number, SavedNoteAnnot[]][] = []
+      const freeTextEntries: [number, SavedFreeTextAnnot[]][] = []
       for (const origIdx of missing) {
         let markupList: SavedMarkupAnnot[] = []
         let noteList: SavedNoteAnnot[] = []
+        let freeTextList: SavedFreeTextAnnot[] = []
         try {
           const page = await doc.getPage(origIdx + 1)
           const annots = (await page.getAnnotations()) as (PdfJsAnnotData & {
@@ -2750,15 +2796,21 @@ export default function App() {
             const note = toSavedNote(a, origIdx)
             return note ? [note] : []
           })
+          freeTextList = annots.flatMap((a) => {
+            const box = toSavedFreeText(a, origIdx)
+            return box ? [box] : []
+          })
         } catch {
           /* page unreadable; no saved annotations to offer */
         }
         markupEntries.push([origIdx, markupList])
         noteEntries.push([origIdx, noteList])
+        freeTextEntries.push([origIdx, freeTextList])
       }
       if (!stale) {
         setSavedMarkups((prev) => new Map([...prev, ...markupEntries]))
         setSavedNotes((prev) => new Map([...prev, ...noteEntries]))
+        setSavedFreeText((prev) => new Map([...prev, ...freeTextEntries]))
       }
     })()
     return () => {
@@ -3045,6 +3097,21 @@ export default function App() {
       if (pendingDeleted.has(a.objNum) || !hitQuads(a.quads)) continue
       return select({ kind: 'savedMarkup', annot: a, ...at })
     }
+    // Saved on-page text boxes (FreeText): the raster paints them, this selects
+    // the topmost box containing the click for the delete popup
+    const savedBoxes = savedFreeText.get(origIdx) ?? []
+    for (let i = savedBoxes.length - 1; i >= 0; i--) {
+      const a = savedBoxes[i]!
+      if (pendingDeleted.has(a.objNum)) continue
+      const r = a.rect
+      if (
+        px >= Math.min(r[0], r[2]) &&
+        px <= Math.max(r[0], r[2]) &&
+        py >= Math.min(r[1], r[3]) &&
+        py <= Math.max(r[1], r[3])
+      )
+        return select({ kind: 'savedFreeText', annot: a, ...at })
+    }
   }
 
   /** Shift a drawing by a PDF-space delta (drag-to-move on the page) */
@@ -3087,6 +3154,20 @@ export default function App() {
                 ...input,
                 from: [input.from[0] + dx, input.from[1] + dy] as [number, number],
                 to: [input.to[0] + dx, input.to[1] + dy] as [number, number],
+              },
+            }
+          case 'text':
+            return {
+              ...d,
+              input: {
+                ...input,
+                rect: [
+                  input.rect[0] + dx,
+                  input.rect[1] + dy,
+                  input.rect[2] + dx,
+                  input.rect[3] + dy,
+                ] as [number, number, number, number],
+                lines: input.lines.map((l) => ({ x: l.x + dx, y: l.y + dy })),
               },
             }
           default:
@@ -4022,6 +4103,8 @@ export default function App() {
     if (sel.kind === 'markup') setMarkups((prev) => prev.filter((m) => m.id !== sel.id))
     else if (sel.kind === 'savedMarkup')
       setAnnotDeletes((prev) => [...prev, { id: newId(), annot: sel.annot }])
+    else if (sel.kind === 'savedFreeText')
+      setAnnotDeletes((prev) => [...prev, { id: newId(), annot: sel.annot }])
     else if (sel.kind === 'drawing') setDrawings((prev) => prev.filter((d) => d.id !== sel.id))
     else if (sel.kind === 'textEdit') setTextEdits((prev) => prev.filter((e) => e.id !== sel.id))
     else if (sel.kind === 'textInsert')
@@ -4119,8 +4202,11 @@ export default function App() {
       objNum: d.annot.objNum,
       subtype: d.annot.type,
       rect: d.annot.rect,
-      // A note thread's comments all share the root's rect; contents disambiguates
-      ...(d.annot.type === 'note' ? { contents: d.annot.contents } : {}),
+      // A note thread's comments all share the root's rect; contents disambiguates.
+      // FreeText passes it too as cheap identity insurance for the delete matcher.
+      ...(d.annot.type === 'note' || d.annot.type === 'freetext'
+        ? { contents: d.annot.contents }
+        : {}),
     })),
     drawings: drawings.map((d) => d.input),
     textEdits: edits.map((e) => e.input),
@@ -4360,6 +4446,51 @@ export default function App() {
   const commitDrawing = (origIdx: number, input: DrawingInput) => {
     pushUndo()
     setDrawings((prev) => [...prev, { id: newId(), input: { ...input, pageIndex: origIdx } }])
+  }
+
+  /** Commit the open text-box editor as a pending drawing. A single undo entry covers
+      the whole create (or edit) so one Ctrl+Z removes the box. The committed rect is
+      the drag box's displayed bounds (kept width, height = lines × leading) mapped
+      back to user space, so it stays aligned on rotated pages. */
+  const commitTextBoxDraft = () => {
+    const draft = textBoxDraft
+    if (!draft) return
+    setTextBoxDraft(null)
+    const css = EDIT_FONT_BY_ID.get(TEXTBOX_FONT)!.css
+    const geom = pageGeom(draft.origIdx)
+    const box = pdfRectToCss(geom, draft.rect, 1)
+    const wrapped = wrapTextBox(draft.text, Math.max(box.width, 8), TEXTBOX_FONT_SIZE, css)
+    if (!wrapped.some((l) => l.trim())) return // empty box: cancel without creating
+    const [ax, ay] = viewToPdf(geom, box.left, box.top)
+    const [bx, by] = viewToPdf(
+      geom,
+      box.left + Math.max(box.width, 8),
+      box.top + wrapped.length * TEXTBOX_FONT_SIZE * TEXTBOX_LINE_GAP,
+    )
+    const input: DrawingInput = {
+      kind: 'text',
+      pageIndex: draft.origIdx,
+      color: draft.color,
+      width: STROKE_WIDTH,
+      rect: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)],
+      text: wrapped.join('\n'),
+      fontSize: TEXTBOX_FONT_SIZE,
+      font: TEXTBOX_FONT,
+      author: noteAuthor || undefined,
+      lines: textBoxBaselines(geom, draft.rect, wrapped.length, TEXTBOX_FONT_SIZE, css),
+    }
+    pushUndo()
+    const editId = draft.id
+    if (editId) {
+      setDrawings(
+        (prev) =>
+          prev.some((d) => d.id === editId)
+            ? prev.map((d) => (d.id === editId ? { ...d, input } : d))
+            : [...prev, { id: editId, input }], // id vanished (undo) → restore as new
+      )
+    } else {
+      setDrawings((prev) => [...prev, { id: newId(), input }])
+    }
   }
 
   /** Render stamps in current page order; page numbers depend on visList, so both preview and save compute fresh */
@@ -5208,7 +5339,10 @@ export default function App() {
   const livePreviewRects = useMemo(() => {
     const map = new Map<
       number,
-      { rects: [number, number, number, number][]; annots: (SavedMarkupAnnot | SavedNoteAnnot)[] }
+      {
+        rects: [number, number, number, number][]
+        annots: (SavedMarkupAnnot | SavedNoteAnnot | SavedFreeTextAnnot)[]
+      }
     >()
     const jobFor = (pageIndex: number) => {
       let job = map.get(pageIndex)
@@ -5272,7 +5406,7 @@ export default function App() {
         objNum: a.objNum,
         subtype: a.type,
         rect: a.rect,
-        ...(a.type === 'note' ? { contents: a.contents } : {}),
+        ...(a.type === 'note' || a.type === 'freetext' ? { contents: a.contents } : {}),
       }))
       const annotKey = excludedAnnots
         .map((a) => `${a.objNum}:${a.subtype}:${imageRectKey(a.rect)}`)
@@ -5943,6 +6077,7 @@ export default function App() {
         else if (editImageMode) setEditImageMode(false)
         else if (pendingSign) setPendingSign(null)
         else if (noteDraft) setNoteDraft(null)
+        else if (textBoxDraft) setTextBoxDraft(null)
         else if (activeNote) setActiveNote(null)
         else if (drawTool) setDrawTool(null)
         else if (selected) setSelected(null)
@@ -6471,6 +6606,7 @@ export default function App() {
                         setPendingTextInsert(null)
                         setImagePick(null)
                         setEditImageMode(false)
+                        if (textBoxDraft) commitTextBoxDraft()
                         setDrawTool((v) => (v === tool ? null : tool))
                       }}
                     >
@@ -7083,7 +7219,7 @@ export default function App() {
                 // in handlePageClick before this runs)
                 if (
                   !(e.target as Element).closest?.(
-                    '.pdf-draw-shape, .pdf-note-pin, .pdf-stamp-preview, .pdf-textedit-preview, .pdf-textinsert-preview, .pdf-textedit-input, .pdf-imgedit-layer, .pdf-imgedit-under, .pdf-del-popup',
+                    '.pdf-draw-shape, .pdf-draw-text, .pdf-note-pin, .pdf-stamp-preview, .pdf-textedit-preview, .pdf-textinsert-preview, .pdf-textedit-input, .pdf-imgedit-layer, .pdf-imgedit-under, .pdf-del-popup',
                   )
                 )
                   setSelected(null)
@@ -7093,6 +7229,15 @@ export default function App() {
                   // placement, not a dismissal; clicking anywhere else discards the draft
                   if (drawTool !== 'note' || !(e.target as Element).closest?.('.pdf-draw-layer'))
                     setNoteDraft(null)
+                }
+                // A click away from the open text-box editor commits it (empty → cancel).
+                // While the textbox tool is armed, page clicks start a new drag instead.
+                if (
+                  textBoxDraft &&
+                  !(e.target as Element).closest?.('.pdf-textbox-editor') &&
+                  !(drawTool === 'textbox' && (e.target as Element).closest?.('.pdf-draw-layer'))
+                ) {
+                  commitTextBoxDraft()
                 }
               }}
             >
@@ -8098,6 +8243,14 @@ export default function App() {
                                     style={pdfRectToCss(geom, quadToRect(q), scale)}
                                   />
                                 ))}
+                              {/* Same, for a saved on-page text box */}
+                              {selected?.kind === 'savedFreeText' &&
+                                selected.annot.pageIndex === origIdx && (
+                                  <div
+                                    className="pdf-markup pdf-markup-selected"
+                                    style={pdfRectToCss(geom, selected.annot.rect, scale)}
+                                  />
+                                )}
                               <DrawLayer
                                 geom={geom}
                                 scale={scale}
@@ -8132,7 +8285,103 @@ export default function App() {
                                 }
                                 onMove={readOnly ? undefined : moveDrawing}
                                 onResize={readOnly ? undefined : resizeDrawing}
+                                onTextBoxRect={
+                                  readOnly
+                                    ? undefined
+                                    : (rect) => {
+                                        setActiveNote(null)
+                                        setSelected(null)
+                                        setTextBoxDraft({
+                                          origIdx,
+                                          id: null,
+                                          rect,
+                                          text: '',
+                                          color: drawColor,
+                                        })
+                                      }
+                                }
+                                onEditText={
+                                  readOnly
+                                    ? undefined
+                                    : (id) => {
+                                        const d = drawings.find((x) => x.id === id)
+                                        if (d?.input.kind === 'text')
+                                          setTextBoxDraft({
+                                            origIdx,
+                                            id,
+                                            rect: d.input.rect,
+                                            text: d.input.text,
+                                            color: d.input.color,
+                                          })
+                                      }
+                                }
                               />
+                              {/* Inline editor for the text box being created/edited */}
+                              {textBoxDraft?.origIdx === origIdx &&
+                                (() => {
+                                  const box = pdfRectToCss(geom, textBoxDraft.rect, scale)
+                                  const css = EDIT_FONT_BY_ID.get(TEXTBOX_FONT)!.css
+                                  return (
+                                    <div
+                                      className="pdf-textbox-editor"
+                                      style={{
+                                        left: box.left,
+                                        top: box.top,
+                                        width: Math.max(box.width, 48),
+                                      }}
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                    >
+                                      <textarea
+                                        autoFocus
+                                        rows={1}
+                                        value={textBoxDraft.text}
+                                        placeholder={t('notePlaceholder')}
+                                        onChange={(e) =>
+                                          setTextBoxDraft({ ...textBoxDraft, text: e.target.value })
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Escape') {
+                                            e.stopPropagation()
+                                            setTextBoxDraft(null)
+                                          } else if (
+                                            e.key === 'Enter' &&
+                                            (e.ctrlKey || e.metaKey) &&
+                                            !e.nativeEvent.isComposing
+                                          ) {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            commitTextBoxDraft()
+                                          }
+                                        }}
+                                        style={{
+                                          fontSize: TEXTBOX_FONT_SIZE * scale,
+                                          lineHeight: `${TEXTBOX_FONT_SIZE * scale * TEXTBOX_LINE_GAP}px`,
+                                          fontFamily: css,
+                                          color: cssRgb(textBoxDraft.color),
+                                        }}
+                                      />
+                                      <div className="pdf-textbox-actions">
+                                        <button
+                                          type="button"
+                                          data-tip={t('cancel')}
+                                          aria-label={t('cancel')}
+                                          onClick={() => setTextBoxDraft(null)}
+                                        >
+                                          ✕
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="pdf-textbox-ok"
+                                          data-tip={t('ok')}
+                                          aria-label={t('ok')}
+                                          onClick={commitTextBoxDraft}
+                                        >
+                                          ✓
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
                               {/* Ghost pin for the note being typed into the margin draft card */}
                               {noteDraft?.origIdx === origIdx &&
                                 (() => {
