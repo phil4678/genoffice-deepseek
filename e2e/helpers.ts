@@ -71,11 +71,11 @@ export async function launchShell(options: LaunchOptions): Promise<LaunchedApp> 
       GENOFFICE_LANG: options.lang ?? 'en',
       ...(process.platform === 'linux' ? { ELECTRON_DISABLE_SANDBOX: '1' } : {}),
     },
-    // Playwright's Electron screencast wedges the page CDP session on Linux
-    // (page.url() stays empty, no lifecycle events, evaluate hangs) — record
-    // only where it works
+    // Playwright's Electron screencast wedges the page CDP session on Linux and
+    // Windows (page.url() stays empty, no lifecycle events, evaluate hangs) —
+    // record only where it works
     recordVideo:
-      process.platform === 'linux'
+      process.platform === 'linux' || process.platform === 'win32'
         ? undefined
         : {
             dir: join(ARTIFACTS_DIR, options.videoDir),
