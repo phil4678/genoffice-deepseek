@@ -19,4 +19,12 @@ describe('uniqueGeneratedPdfPath', () => {
   it('sanitizes characters that are invalid in file names', () => {
     expect(uniqueGeneratedPdfPath('/save', 'a:b?.pdf', () => false)).toBe(join('/save', 'a_b_.pdf'))
   })
+
+  it('keeps a lone letter before a colon when the suggestion is a name, not a path', () => {
+    // basename must not treat 'c:' as a Windows drive prefix here — there is
+    // no path separator, so the whole suggestion is the file name
+    expect(uniqueGeneratedPdfPath('/save', 'c: draft v2?.pdf', () => false)).toBe(
+      join('/save', 'c_ draft v2_.pdf'),
+    )
+  })
 })
